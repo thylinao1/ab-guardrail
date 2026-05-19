@@ -1,0 +1,32 @@
+# env
+.env
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# tests & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# virtualenvs
+.venv/
+venv/
+
+# editors
+.vscode/
+.idea/
+.DS_Store
+
+# generated outputs (keep .gitkeep so the dir is committed)
+reports/*.md
+reports/*.png
+!reports/.gitkeep
