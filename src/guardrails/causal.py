@@ -40,7 +40,7 @@ References
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np
@@ -142,8 +142,8 @@ def _match_1nn_with_caliper(
     treated_pos: list[int] = []
     control_pos: list[int] = []
     discarded = 0
-    for i, l in enumerate(logit_t):
-        pos = int(np.searchsorted(sorted_c, l))
+    for i, logit_val in enumerate(logit_t):
+        pos = int(np.searchsorted(sorted_c, logit_val))
         # Candidates are the two neighbours around pos.
         candidates = []
         if pos < len(sorted_c):
@@ -152,7 +152,7 @@ def _match_1nn_with_caliper(
             candidates.append(pos - 1)
         best: tuple[float, int] | None = None
         for c in candidates:
-            dist = abs(sorted_c[c] - l)
+            dist = abs(sorted_c[c] - logit_val)
             if dist <= caliper and (best is None or dist < best[0]):
                 best = (dist, int(order[c]))
         if best is None:
@@ -286,7 +286,8 @@ def propensity_score_match(
             "distributions do not overlap."
         )
 
-    work_s = work.loc[in_support].reset_index(drop=True)
+    # `work_s` is intentionally elided — once we have aligned numpy views,
+    # we don't need the dropped-DataFrame any further in this function.
     t_s = t[in_support]
     y_s = y[in_support]
     X_raw_s = X_raw[in_support]

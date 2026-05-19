@@ -12,7 +12,7 @@ investigation is expensive enough that we don't want to chase false alarms.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
@@ -20,7 +20,6 @@ import pandas as pd
 from scipy import stats
 
 from ..exceptions import StatisticalCheckError
-
 
 SRM_PVALUE_THRESHOLD = 0.001
 

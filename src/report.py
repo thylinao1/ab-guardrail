@@ -20,7 +20,6 @@ from typing import Any
 
 from .guardrails import MetricTestResult, PSMResult, SRMResult
 
-
 VERDICT_SAFE = "SAFE TO ROLL OUT"
 VERDICT_COMPROMISED = "EXPERIMENT COMPROMISED"
 VERDICT_NULL = "NO SIGNIFICANT EFFECT"

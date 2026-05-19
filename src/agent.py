@@ -26,8 +26,9 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass, asdict, field
-from typing import Any, Callable
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 import pandas as pd
 
@@ -41,7 +42,6 @@ from .guardrails import (
     propensity_score_match,
     srm_check,
 )
-
 
 SCHEMA_MODEL = "claude-sonnet-4-5"
 NARRATIVE_MODEL = "claude-sonnet-4-5"
@@ -615,10 +615,12 @@ def _extract_json(text: str) -> dict[str, Any]:
     candidate = fence.group(1) if fence else text
     try:
         return json.loads(candidate)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as outer_exc:
         m = re.search(r"\{.*\}", candidate, flags=re.DOTALL)
         if not m:
-            raise AgentError(f"No JSON object found in LLM response: {text[:200]!r}")
+            raise AgentError(
+                f"No JSON object found in LLM response: {text[:200]!r}"
+            ) from outer_exc
         try:
             return json.loads(m.group(0))
         except json.JSONDecodeError as exc:

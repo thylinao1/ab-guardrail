@@ -25,7 +25,7 @@ primary; here we expose it as opt-in via the CLI.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 import numpy as np
@@ -33,7 +33,6 @@ import pandas as pd
 from scipy import stats
 
 from ..exceptions import StatisticalCheckError
-
 
 MetricKind = Literal["binary", "continuous"]
 
