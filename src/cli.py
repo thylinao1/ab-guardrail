@@ -1,11 +1,29 @@
 """Command-line entry point.
 
+Three execution modes, set with --mode:
+
+    pipeline  (default)  Deterministic routing. Column roles are inferred
+                         by a hardcoded heuristic; SRM / metric tests / PSM
+                         run as a plain Python pipeline. The LLM is invoked
+                         exactly ONCE, at the very end, to turn the
+                         deterministic JSON into a plain-English summary.
+                         This is the production-sane path: no LLM latency
+                         or cost in the routing hot loop.
+
+    agent     (opt-in)   Claude orchestrates routing via a tool-use loop.
+                         Useful when column roles cannot be inferred
+                         deterministically (unfamiliar schema). Slower and
+                         costlier - deliberately not the default.
+
+    offline              Fully deterministic. No API calls at all. The
+                         summary is rendered from a template. Used in CI
+                         and offline runs; byte-stable.
+
 Examples:
 
     ab-guardrail data/clean_experiment.csv
-    ab-guardrail data/compromised_experiment.csv --out reports/report.md
-    ab-guardrail data/compromised_experiment.csv --agent none      # deterministic
-    ab-guardrail data/clean_experiment.csv --agent tools           # LLM orchestrates
+    ab-guardrail data/compromised_experiment.csv --mode offline
+    ab-guardrail data/messy_experiment.csv --mode pipeline
     ab-guardrail data/clean_experiment.csv --cuped pre_signup_value
 """
 
@@ -26,28 +44,20 @@ from .agent import (
     AgentRun,
     SchemaPlan,
     deterministic_narrative,
-    infer_schema,
     infer_schema_heuristic,
     narrate,
     run_tool_agent,
 )
 from .data_loader import DatasetProfile, load_experiment_csv
 from .exceptions import AgentError, GuardrailError
-from .guardrails import (
-    metric_test,
-    propensity_score_match,
-    srm_check,
-)
-from .guardrails.metric_tests import (
-    apply_cuped,
-    apply_multiple_testing_correction,
-)
+from .guardrails import metric_test, propensity_score_match, srm_check
+from .guardrails.metric_tests import apply_cuped, apply_multiple_testing_correction
 from .report import (
     VERDICT_COMPROMISED,
     VERDICT_NULL,
     VERDICT_SAFE,
-    _maybe_render_love_plot,
     build_report,
+    render_love_plot,
 )
 
 
@@ -126,28 +136,25 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="ab-guardrail",
         description=(
-            "Automated experimentation guardrail agent. Reads an A/B-test CSV, "
+            "Automated experimentation guardrail. Reads an A/B-test CSV, "
             "checks for SRM, runs metric-shift tests, applies propensity-score "
             "matching with bootstrap SE and Rosenbaum bounds, and writes a "
-            "Markdown report."
+            "Markdown report. Routing is deterministic by default; the LLM "
+            "only writes the closing summary."
         ),
     )
     p.add_argument("csv", type=Path, help="Path to the experiment CSV.")
     p.add_argument(
-        "--out",
-        type=Path,
-        default=None,
-        help="Where to write the Markdown report (default: reports/<csv_stem>_report.md).",
-    )
-    p.add_argument(
-        "--agent",
-        choices=["tools", "simple", "none"],
-        default="tools",
+        "--mode",
+        choices=["pipeline", "agent", "offline"],
+        default="pipeline",
         help=(
-            "LLM agent mode. "
-            "'tools' (default): Claude orchestrates the analysis via tool calls. "
-            "'simple': two LLM calls (schema + narrative). "
-            "'none': fully deterministic — no API calls."
+            "Execution mode. "
+            "'pipeline' (default): deterministic routing, LLM writes only the "
+            "final summary. "
+            "'agent': Claude tool-use loop drives routing (opt-in; for "
+            "unfamiliar schemas). "
+            "'offline': no API calls at all."
         ),
     )
     p.add_argument(
@@ -177,8 +184,13 @@ def main(argv: list[str] | None = None) -> int:
         "--secondary-metrics", help="Comma-separated list of secondary metric columns."
     )
     p.add_argument(
-        "--covariates",
-        help="Comma-separated list of covariate columns (for PSM).",
+        "--covariates", help="Comma-separated list of covariate columns (for PSM)."
+    )
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Where to write the Markdown report (default: reports/<csv_stem>_report.md).",
     )
     p.add_argument(
         "--json",
@@ -198,9 +210,14 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
+    # --- load + clean ------------------------------------------------------
     print(f"{_BOLD}{_CYAN}>> Loading{_RESET} {args.csv}")
     df, profile = load_experiment_csv(args.csv)
     print(f"   {profile.n_rows:,} rows, {len(profile.columns)} columns.")
+    if profile.quality.has_issues:
+        print(f"   {_YELLOW}data-quality notes:{_RESET}")
+        for line in profile.quality.summary_lines():
+            print(f"     {_DIM}- {line}{_RESET}")
 
     expected_ratio = None
     if args.expected_ratio:
@@ -209,141 +226,117 @@ def _run(args: argparse.Namespace) -> int:
         except json.JSONDecodeError as exc:
             raise GuardrailError(f"--expected-ratio is not valid JSON: {exc}") from exc
 
+    # --- routing -----------------------------------------------------------
     agent_run: AgentRun | None = None
     plan: SchemaPlan
 
-    if args.agent == "tools":
+    if args.mode == "agent":
         try:
-            print(f"{_BOLD}{_CYAN}>> Agent (tools mode){_RESET}  Claude orchestrates the analysis")
-            agent_run = run_tool_agent(df, profile, progress=lambda s: print(f"   {_DIM}{s}{_RESET}"))
+            print(f"{_BOLD}{_CYAN}>> Routing (agent){_RESET}  "
+                  f"Claude tool-use loop")
+            agent_run = run_tool_agent(
+                df, profile, progress=lambda s: print(f"   {_DIM}{s}{_RESET}")
+            )
             plan = agent_run.plan
         except AgentError as exc:
-            print(f"   {_YELLOW}tools mode unavailable ({exc}); falling back to simple{_RESET}",
-                  file=sys.stderr)
-            args.agent = "simple"
-
-    if args.agent in {"simple", "none"} and agent_run is None:
-        print(f"{_BOLD}{_CYAN}>> Inferring schema{_RESET} "
-              f"({'heuristic' if args.agent == 'none' else 'Claude'})")
-        if args.agent == "none":
+            print(f"   {_YELLOW}agent routing unavailable ({exc}); "
+                  f"using deterministic routing{_RESET}", file=sys.stderr)
             plan = infer_schema_heuristic(profile)
-        else:
-            try:
-                plan = infer_schema(profile)
-            except AgentError as exc:
-                print(f"   {_YELLOW}LLM schema failed ({exc}); using heuristic{_RESET}",
-                      file=sys.stderr)
-                plan = infer_schema_heuristic(profile)
-        plan = _apply_overrides(plan, args, profile)
+    else:
+        print(f"{_BOLD}{_CYAN}>> Routing (deterministic){_RESET}  "
+              f"hardcoded heuristic - no LLM")
+        plan = infer_schema_heuristic(profile)
 
-    # If we ran tools, still let CLI overrides win.
-    if agent_run is not None:
-        plan = _apply_overrides(plan, args, profile)
-
+    plan = _apply_overrides(plan, args, profile)
     print(f"   variant={plan.variant_column} "
           f"({plan.control_label}/{plan.treatment_label}); "
           f"primary={plan.primary_metric}; "
           f"secondary={plan.secondary_metrics}; "
           f"covariates={plan.covariates}")
 
-    # Optional CUPED variance reduction.
+    # --- optional CUPED variance reduction --------------------------------
     cuped_note = ""
     if args.cuped:
         if args.cuped not in profile.columns:
             raise GuardrailError(f"--cuped covariate {args.cuped!r} not in CSV.")
         if args.cuped in plan.covariates:
-            # Don't double-count: drop it from PSM covariates if we use it for CUPED.
             plan = SchemaPlan(
                 **{**plan.to_dict(),
                    "covariates": [c for c in plan.covariates if c != args.cuped]}
             )
         df, cuped = apply_cuped(df, plan.primary_metric, args.cuped, in_place=True)
         cuped_note = (
-            f" CUPED on {args.cuped}: θ={cuped.theta:.4f}, "
+            f" CUPED on {args.cuped}: theta={cuped.theta:.4f}, "
             f"variance reduction {cuped.variance_reduction:.1%}"
         )
-        # Swap the primary metric to the adjusted column.
-        plan = SchemaPlan(
-            **{**plan.to_dict(), "primary_metric": cuped.adjusted_metric}
-        )
+        plan = SchemaPlan(**{**plan.to_dict(), "primary_metric": cuped.adjusted_metric})
         print(f"{_BOLD}{_CYAN}>> CUPED{_RESET}  {cuped_note.strip()}")
 
-    # Statistical pipeline — re-run regardless of agent mode so the same
-    # final numbers always make it into the report.
-    if agent_run is None or args.cuped:
-        print(f"{_BOLD}{_CYAN}>> SRM check{_RESET}")
-        srm = srm_check(df, plan.variant_column, expected_ratio=expected_ratio)
-        metric_cols = [plan.primary_metric, *plan.secondary_metrics]
-        print(f"{_BOLD}{_CYAN}>> Metric tests{_RESET}  ({', '.join(metric_cols)})")
-        metric_results = [
-            metric_test(df, m, plan.variant_column, plan.control_label, plan.treatment_label)
-            for m in metric_cols
-        ]
-        # CUPED already performs a covariate adjustment, so running PSM on
-        # the CUPED-adjusted metric (with the remaining covariates) is an
-        # over-correction. Skip PSM for the adjusted metric specifically.
-        psm_metrics = [
-            m for m in metric_cols
-            if not (args.cuped and m.endswith("__cuped"))
-        ]
-        if psm_metrics and plan.covariates:
-            print(f"{_BOLD}{_CYAN}>> Propensity score matching{_RESET}  ({', '.join(psm_metrics)})")
-            psm_results = [
-                propensity_score_match(
-                    df,
-                    metric=m,
-                    variant_column=plan.variant_column,
-                    control_label=plan.control_label,
-                    treatment_label=plan.treatment_label,
-                    covariates=plan.covariates,
-                )
-                for m in psm_metrics
-            ]
-        else:
-            psm_results = []
-            print(f"{_BOLD}{_CYAN}>> Propensity score matching{_RESET}  skipped "
-                  f"(CUPED already adjusts for the covariate)")
-    else:
-        srm = agent_run.srm
-        metric_results = agent_run.metric_results
-        psm_results = agent_run.psm_results
+    # --- statistical pipeline (always deterministic) ----------------------
+    print(f"{_BOLD}{_CYAN}>> SRM check{_RESET}")
+    srm = srm_check(df, plan.variant_column, expected_ratio=expected_ratio)
 
-    # Multiple-testing correction across metric tests.
-    metric_results = apply_multiple_testing_correction(metric_results, method=args.correction)
+    metric_cols = [plan.primary_metric, *plan.secondary_metrics]
+    print(f"{_BOLD}{_CYAN}>> Metric tests{_RESET}  ({', '.join(metric_cols)})")
+    metric_results = [
+        metric_test(df, m, plan.variant_column, plan.control_label, plan.treatment_label)
+        for m in metric_cols
+    ]
+    metric_results = apply_multiple_testing_correction(
+        metric_results, method=args.correction
+    )
+
+    psm_metrics = [
+        m for m in metric_cols if not (args.cuped and m.endswith("__cuped"))
+    ]
+    if psm_metrics and plan.covariates:
+        print(f"{_BOLD}{_CYAN}>> Propensity score matching{_RESET}  "
+              f"({', '.join(psm_metrics)})")
+        psm_results = [
+            propensity_score_match(
+                df,
+                metric=m,
+                variant_column=plan.variant_column,
+                control_label=plan.control_label,
+                treatment_label=plan.treatment_label,
+                covariates=plan.covariates,
+            )
+            for m in psm_metrics
+        ]
+    else:
+        psm_results = []
+        print(f"{_BOLD}{_CYAN}>> Propensity score matching{_RESET}  skipped "
+              f"({'CUPED already adjusts for the covariate' if args.cuped else 'no covariates'})")
 
     for m in metric_results:
-        sig = (
-            f"{_GREEN}sig{_RESET}"
-            if m.significant_at_5pct
-            else f"{_YELLOW}n.s.{_RESET}"
-        )
+        sig = f"{_GREEN}sig{_RESET}" if m.significant_at_5pct else f"{_YELLOW}n.s.{_RESET}"
         adj = f" adj.p={m.adjusted_p_value:.3g}" if m.adjusted_p_value is not None else ""
-        print(f"   {m.metric}: Δ={m.absolute_diff:+.4f} p={m.primary_p_value:.3g}{adj} [{sig}]")
+        print(f"   {m.metric}: delta={m.absolute_diff:+.4f} "
+              f"p={m.primary_p_value:.3g}{adj} [{sig}]")
     for psm in psm_results:
         gamma = psm.rosenbaum.gamma_critical if psm.rosenbaum else None
-        gstr = f" Γ_crit={gamma:.2f}" if gamma else " Γ_crit=robust"
-        print(
-            f"   PSM {psm.metric}: naive={psm.naive_effect:+.4f}  "
-            f"ATT={psm.psm_att:+.4f} [{psm.psm_ci_low:+.4f},{psm.psm_ci_high:+.4f}]  "
-            f"({psm.n_matched_pairs:,} pairs;{gstr})"
-        )
+        gstr = f" gamma_crit={gamma:.2f}" if gamma else " gamma_crit=robust"
+        print(f"   PSM {psm.metric}: naive={psm.naive_effect:+.4f}  "
+              f"ATT={psm.psm_att:+.4f} [{psm.psm_ci_low:+.4f},{psm.psm_ci_high:+.4f}]  "
+              f"({psm.n_matched_pairs:,} pairs;{gstr})")
 
-    # Narrative provider — closes over agent mode.
+    # --- closing summary: the ONLY place the LLM is invoked ---------------
     def _narrative_provider(payload):
-        if args.agent == "tools" and agent_run is not None and not args.cuped:
-            return agent_run.narrative or deterministic_narrative(payload)
-        if args.agent == "none":
+        if args.mode == "offline":
             return deterministic_narrative(payload)
+        if args.mode == "agent" and agent_run is not None and not args.cuped:
+            return agent_run.narrative or deterministic_narrative(payload)
+        # pipeline mode: single LLM call on the finished, deterministic JSON.
         try:
             return narrate(payload)
         except AgentError as exc:
-            print(f"   {_YELLOW}narration failed ({exc}); using deterministic{_RESET}",
-                  file=sys.stderr)
+            print(f"   {_YELLOW}summary LLM call failed ({exc}); "
+                  f"using template{_RESET}", file=sys.stderr)
             return deterministic_narrative(payload)
 
     out_path = args.out or Path("reports") / f"{args.csv.stem}_report.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    love_plot_path = _maybe_render_love_plot(
+    love_plot_path = render_love_plot(
         psm_results, out_path.with_name(f"{out_path.stem}_love_plot.png")
     )
 
@@ -357,6 +350,7 @@ def _run(args: argparse.Namespace) -> int:
         primary_metric=plan.primary_metric,
         narrative_provider=_narrative_provider,
         love_plot_path=love_plot_path,
+        quality=profile.quality,
     )
     out_path.write_text(report.markdown, encoding="utf-8")
     print(f"   wrote {out_path}")
@@ -369,7 +363,7 @@ def _run(args: argparse.Namespace) -> int:
     for r in report.reasons:
         print(f"  - {r}")
     print()
-    print(f"{_BOLD}Narrative:{_RESET}")
+    print(f"{_BOLD}Summary:{_RESET}")
     print(report.narrative)
     print()
 

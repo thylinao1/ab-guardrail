@@ -1,36 +1,40 @@
-# Automated A/B Testing & Causal Inference Agent
+# Automated A/B Testing & Causal Inference Guardrail
 
-A command-line guardrail agent for online experiments. Point it at an A/B-test
+A command-line guardrail for online experiments. Point it at an A/B-test
 CSV and it will:
 
-1. Use **Anthropic Claude with tool-use** to orchestrate the analysis — Claude
-   inspects the dataset, decides which column is the variant, which are
-   outcomes, and which are covariates, then calls statistical tools to run
-   the appropriate checks.
-2. Run a **Chi-square Sample Ratio Mismatch (SRM)** test on the allocation —
+1. **Load and clean the file defensively** — skip malformed rows, drop
+   exact-duplicate (double-logged) rows and all-null columns, coerce dirty
+   numeric columns, and report every repair in a data-quality summary.
+2. **Route deterministically** — a hardcoded heuristic identifies the
+   variant column, metrics, and covariates. No LLM in this hot path.
+3. Run a **Chi-square Sample Ratio Mismatch (SRM)** test on the allocation —
    the single most under-checked failure mode in industry A/B testing.
-3. Run **Welch's t-test + Mann-Whitney U** on continuous metrics, and a
+4. Run **Welch's t-test + Mann-Whitney U** on continuous metrics, and a
    **2-proportion chi-square** + **Newcombe hybrid-score 95% CI** (Newcombe,
    1998) on binary metrics, with standardised effect sizes.
-4. Apply **Benjamini-Hochberg FDR** correction (or Bonferroni) across
+5. Apply **Benjamini-Hochberg FDR** correction (or Bonferroni) across
    metric tests to avoid false discoveries when checking many metrics.
-5. Estimate the **Average Treatment effect on the Treated (ATT)** via
+6. Estimate the **Average Treatment effect on the Treated (ATT)** via
    **Propensity Score Matching** (1-NN, with replacement, caliper =
    0.2 × SD of logit propensity, Austin 2011), with **common-support
    trimming**, **bootstrap standard errors** (because the naive paired-t
    SE is biased under matching with replacement; Abadie & Imbens 2006),
-   and **Rosenbaum sensitivity bounds** to quantify how strong an
-   unmeasured confounder would have to be to overturn the finding
-   (Rosenbaum 2002).
-6. Optionally apply **CUPED** variance reduction (Deng et al. WSDM 2013)
-   using a pre-experiment covariate, to tighten confidence intervals.
-7. Emit a structured Markdown report with a launch verdict —
+   and **Rosenbaum sensitivity bounds** for hidden bias (Rosenbaum 2002).
+7. Optionally apply **CUPED** variance reduction (Deng et al. WSDM 2013).
+8. Emit a structured Markdown report with a launch verdict —
    `SAFE TO ROLL OUT`, `EXPERIMENT COMPROMISED`, or `NO SIGNIFICANT EFFECT` —
-   a love-plot PNG of pre/post covariate balance, and an LLM-written
-   executive summary that is constrained to the numerical results.
+   a love-plot PNG of pre/post covariate balance, and a plain-English
+   executive summary.
 
-The LLM is intentionally kept *outside* the statistical loop. It decides
-*what* to compute; every number reported comes from `scipy.stats` /
+**Where the LLM fits.** Routing and statistics are a plain, deterministic
+Python pipeline — paying LLM latency and cost to dispatch data to three
+deterministic functions is poor production engineering. The LLM is invoked
+**exactly once, at the very end**, to turn the finished results JSON into
+the executive summary. A tool-use *agent* mode is available opt-in
+(`--mode agent`) for datasets whose column roles cannot be inferred
+deterministically — useful, but deliberately not the default. The LLM
+never computes a number; every statistic comes from `scipy.stats` /
 `scikit-learn`.
 
 ---
@@ -55,16 +59,17 @@ This tool does the four things every serious experimentation review needs:
 
 ---
 
-## Three agent modes
+## Three execution modes
 
-| Mode | What it does | When to use |
-|---|---|---|
-| `--agent tools` (**default**) | Claude is given three tools (`run_srm_check`, `run_metric_test`, `run_propensity_score_match`) and orchestrates the analysis over multiple turns. | Production use. Demonstrates real agentic tool-use. |
-| `--agent simple` | Two LLM calls: one to infer schema, one to write the narrative. | API-cheaper for routine batch use. |
-| `--agent none` | Fully deterministic — column-name heuristic for schema, template-based narrative. | CI, testing, offline use, when no API key is available. |
+| Mode | Routing | Final summary | When to use |
+|---|---|---|---|
+| `--mode pipeline` (**default**) | deterministic heuristic — no LLM | one LLM call on the finished JSON | Production. No LLM in the hot path. |
+| `--mode agent` (opt-in) | Claude tool-use loop | agent's closing turn | Unfamiliar schemas where deterministic routing fails. Slower, costlier. |
+| `--mode offline` | deterministic heuristic — no LLM | template (no API) | CI, offline runs. Byte-stable. |
 
 In every mode the statistical numbers are computed deterministically by
-`scipy.stats` and `scikit-learn`. The LLM never computes a p-value.
+`scipy.stats` and `scikit-learn`. The LLM never computes a p-value, and on
+the default path it is not on the routing loop at all.
 
 ---
 
@@ -75,14 +80,16 @@ In every mode the statistical numbers are computed deterministically by
                  │
                  ▼
        ┌──────────────────┐
-       │  data_loader.py  │  schema validation + dataset profile
+       │  data_loader.py  │  defensive load: skip malformed rows, drop
+       │                  │  duplicates + all-null cols, coerce dirty
+       │                  │  numerics → DataQualityReport
        └────────┬─────────┘
                 │
                 ▼
        ┌──────────────────────────────┐
-       │   agent.py  (Claude)         │
-       │  ── infer schema OR          │
-       │  ── orchestrate tool calls   │
+       │  routing (deterministic)     │  hardcoded heuristic picks the
+       │  infer_schema_heuristic()    │  variant / metrics / covariates.
+       │  [--mode agent: tool-use]    │  No LLM on the default path.
        └────────┬─────────────────────┘
                 │
    ┌────────────┼────────────────────────┐
@@ -95,14 +102,14 @@ In every mode the statistical numbers are computed deterministically by
    └────────────┼────────────────────────┘
                 ▼
        ┌──────────────────┐
-       │     report.py    │  verdict logic + Markdown render
-       │                  │  love-plot of pre/post SMD
+       │     report.py    │  deterministic verdict logic + Markdown
+       │                  │  render + love-plot of pre/post SMD
        └────────┬─────────┘
                 │
                 ▼
        ┌──────────────────┐
-       │   agent.py       │  LLM: executive summary
-       │   (or template)  │
+       │  narrate()       │  ◀── the ONLY LLM call on the default path:
+       │  (1 LLM call)    │      summarises the finished results JSON
        └────────┬─────────┘
                 │
                 ▼
@@ -122,25 +129,28 @@ ab_testing_agent/
 ├── .github/workflows/ci.yml  pytest + ruff on push
 ├── data/
 │   ├── clean_experiment.csv          generated; healthy A/B test
-│   └── compromised_experiment.csv    generated; SRM + confounding
+│   ├── compromised_experiment.csv    generated; SRM + confounding
+│   └── messy_experiment.csv          generated; clean test, dirty file
 ├── reports/                  ← generated Markdown reports + love-plots
 ├── scripts/
-│   └── generate_data.py      synthetic data generator
+│   ├── generate_data.py      synthetic data generator (3 datasets)
+│   └── criteo_adapter.py     maps the real Criteo Uplift dataset → schema
 ├── src/
-│   ├── cli.py                argparse entry-point
-│   ├── agent.py              tool-use orchestration, schema inference, narrative
-│   ├── data_loader.py        CSV ingestion + profile
+│   ├── cli.py                argparse entry-point, --mode {pipeline,agent,offline}
+│   ├── agent.py              deterministic routing heuristic, narrate(), tool-use agent
+│   ├── data_loader.py        defensive CSV load + DataQualityReport
 │   ├── exceptions.py         typed errors
 │   ├── report.py             verdict logic + Markdown + love-plot
 │   └── guardrails/
 │       ├── srm.py            chi-square SRM
 │       ├── metric_tests.py   Welch / MW / Newcombe / BH-FDR / CUPED
 │       └── causal.py         PSM with trimming, bootstrap SE, Rosenbaum
-└── tests/                    pytest suite (21 tests)
+└── tests/                    pytest suite (30 tests)
     ├── conftest.py
     ├── test_srm.py
     ├── test_metric_tests.py
     ├── test_psm.py
+    ├── test_data_loader.py   defensive-loading / messy-data tests
     └── test_verdict.py
 ```
 
@@ -152,16 +162,16 @@ ab_testing_agent/
 # 1. Install
 pip install -e ".[dev]"
 
-# 2. Set your API key (or skip and use --agent none)
-cp .env.example .env
-# edit .env to add your ANTHROPIC_API_KEY
+# 2. (Optional) set an API key for the closing summary
+cp .env.example .env       # add ANTHROPIC_API_KEY — or skip and use --mode offline
 
-# 3. Generate the demo datasets
+# 3. Generate the three demo datasets
 python scripts/generate_data.py
 
-# 4. Run the agent
+# 4. Run it
 ab-guardrail data/clean_experiment.csv
 ab-guardrail data/compromised_experiment.csv
+ab-guardrail data/messy_experiment.csv
 
 # 5. Run the tests
 pytest
@@ -170,16 +180,18 @@ pytest
 Reports land in `reports/<csv_stem>_report.md` alongside a
 `<csv_stem>_love_plot.png` of pre/post covariate balance.
 
-### Without an API key
+Default `--mode pipeline` routes deterministically and makes a single LLM
+call for the closing summary. If `ANTHROPIC_API_KEY` is unset it silently
+falls back to a template summary — the verdict and every statistic are
+identical either way.
+
+### Fully offline
 
 ```bash
-ab-guardrail data/compromised_experiment.csv --agent none
+ab-guardrail data/compromised_experiment.csv --mode offline
 ```
 
-`--agent none` uses a deterministic column-name heuristic and a
-template-based narrative. Verdicts and statistical numbers are identical
-with or without the LLM — the LLM never sees raw data, only column names
-and a few sample rows.
+No API calls at all. Byte-stable; used in CI.
 
 ### Variance reduction with CUPED
 
@@ -188,9 +200,9 @@ ab-guardrail data/clean_experiment.csv --cuped pre_signup_value
 ```
 
 CUPED uses a pre-experiment covariate to reduce variance of the primary
-metric, producing tighter confidence intervals on the same effect. When
-CUPED is applied, PSM is skipped for the adjusted metric (CUPED has
-already done the covariate adjustment parametrically).
+metric — tighter confidence intervals on the same effect. When CUPED is
+applied, PSM is skipped for the adjusted metric (CUPED has already done the
+covariate adjustment parametrically).
 
 ### Bring your own CSV
 
@@ -207,25 +219,75 @@ ab-guardrail my_data.csv \
 
 ---
 
-## What the two demo datasets look like
+## The three demo datasets
 
-Both datasets share the schema `(user_id, variant, pre_signup_value,
-device, country, converted, revenue)` with 12,000 users.
+All three share the schema `(user_id, variant, pre_signup_value, device,
+country, converted, revenue)` with 12,000 users.
 
-**`clean_experiment.csv`** — properly randomised. The agent should output
-**SAFE TO ROLL OUT**: SRM not detected, conversion lift ≈ +3.4pp
-(p ≈ 7 × 10⁻⁸), PSM-adjusted ATT in the same direction, Rosenbaum
-critical Γ around 1.25 (mild robustness to hidden bias).
+**`clean_experiment.csv`** — properly randomised. Verdict **SAFE TO ROLL
+OUT**: SRM not detected, conversion lift ≈ +3.4pp (p ≈ 7 × 10⁻⁸),
+PSM-adjusted ATT in the same direction.
 
-**`compromised_experiment.csv`** — two simultaneous problems:
-- **SRM**: 61/39 split instead of 50/50, because variant assignment
-  is correlated with `pre_signup_value` and `device`.
-- **Confounding**: the true treatment effect is zero, but treatment
-  systematically gets higher-value users.
+**`compromised_experiment.csv`** — two simultaneous problems: a 61/39 split
+(SRM) and variant assignment correlated with `pre_signup_value` and
+`device` (confounding). Verdict **EXPERIMENT COMPROMISED**, primarily
+citing the SRM (p ≈ 2 × 10⁻¹³²); PSM shows the naive revenue lift shrink
+under adjustment.
 
-The agent should output **EXPERIMENT COMPROMISED**, primarily citing the
-SRM (p ≈ 2 × 10⁻¹³²), and the PSM step shows the naive revenue lift of
-+$0.57 shrinks to +$0.42 (bootstrap CI [+0.13, +0.73]) after adjustment.
+**`messy_experiment.csv`** — the experiment is *clean* (50/50, a real
+lift); the **file** is broken, the way a real export is: ~8% missing
+`pre_signup_value`, ~5% missing `device`, dirty `ERROR`/`NULL` tokens in a
+numeric column, an all-null `experiment_notes` column, 25 duplicate rows,
+and 3 malformed rows. The loader repairs all of it, reports each repair,
+and the pipeline still returns **SAFE TO ROLL OUT** — demonstrating that
+data-quality defects do not silently corrupt the verdict.
+
+---
+
+## Messy real-world data
+
+Production e-commerce A/B logs are not tidy. `data_loader.py` ingests CSVs
+defensively and surfaces a `DataQualityReport` so nothing is repaired
+silently:
+
+| Pathology | Handling |
+|---|---|
+| malformed rows (wrong field count) | skipped at parse time, counted |
+| exact-duplicate rows (double-logged) | dropped, counted |
+| all-null columns (instrumented, never populated) | dropped, named |
+| dirty numeric tokens (`ERROR`, `NULL`, `""`) | column coerced to numeric; bad tokens → missing |
+| missing covariate values | reported per column; PSM / metric tests drop incomplete rows per analysis |
+
+Every repair is printed to the terminal and written into a **Data quality**
+section of the Markdown report.
+
+### Validating against the Criteo Uplift dataset
+
+The synthetic demos have a known ground truth; real data does not.
+`scripts/criteo_adapter.py` maps the public **Criteo Uplift Modeling
+dataset** (~13.9M-row randomised advertising experiment, 12 anonymised
+features) onto this tool's schema:
+
+```bash
+# download criteo-uplift-v2.1.csv.gz from
+# https://ailab.criteo.com/criteo-uplift-prediction-dataset/  then:
+python scripts/criteo_adapter.py /path/to/criteo-uplift-v2.1.csv \
+    --out data/criteo_ready.csv --sample 300000
+
+ab-guardrail data/criteo_ready.csv --mode pipeline \
+    --primary-metric conversion --secondary-metrics visit \
+    --covariates f0,f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11 \
+    --expected-ratio '{"control": 0.15, "treatment": 0.85}'
+```
+
+Two real-data lessons are baked into the adapter. First, Criteo encodes
+treatment as a 0/1 column — the loader deliberately excludes numeric 0/1
+columns from variant candidates, so the adapter remaps it to string
+labels. Second, **Criteo is designed with an ~85/15 split, not 50/50** —
+the SRM check compares observed against *planned*, so the planned ratio
+must be passed via `--expected-ratio` or the check false-positives. The
+adapter prints the exact command, including the correct ratio, after it
+runs.
 
 ---
 
@@ -233,10 +295,10 @@ SRM (p ≈ 2 × 10⁻¹³²), and the PSM step shows the naive revenue lift of
 
 ```
 ab-guardrail <csv>
-             [--agent {tools,simple,none}]    LLM mode (default: tools)
+             [--mode {pipeline,agent,offline}]   default: pipeline
              [--correction {bh,bonferroni,none}]
-             [--cuped COL]                    variance-reduction covariate
-             [--expected-ratio JSON]          {"A": 0.5, "B": 0.5}
+             [--cuped COL]                       variance-reduction covariate
+             [--expected-ratio JSON]             {"A": 0.5, "B": 0.5}
              [--variant-column NAME]
              [--control-label LABEL] [--treatment-label LABEL]
              [--primary-metric NAME] [--secondary-metrics A,B]
@@ -274,9 +336,13 @@ The verdict is decided deterministically — the LLM does not vote.
 - Rosenbaum bounds assume one hidden binary confounder with odds-ratio
   influence Γ; they are an *upper bound* on the worst-case p-value at
   that level of hidden bias. The bound is conservative.
-- The agent does not detect: novelty effects, primacy effects, peeking,
+- The tool does not detect: novelty effects, primacy effects, peeking,
   network/SUTVA violations between arms, or post-treatment selection.
   These require experiment design, not analysis.
+- The Criteo adapter is shipped and unit-tested against a synthetic
+  Criteo-shaped CSV, but a full run needs the ~297 MB dataset downloaded
+  locally — it is not exercised in CI. The three bundled demo datasets are
+  synthetic, with a known ground truth, by design.
 
 ---
 

@@ -276,7 +276,7 @@ def _psm_section(psm_results: list[PSMResult]) -> str:
     return "\n".join(lines)
 
 
-def _maybe_render_love_plot(
+def render_love_plot(
     psm_results: list[PSMResult], out_path: Path
 ) -> Path | None:
     """Render a love-plot (pre vs post SMD) of the first PSM result.
@@ -330,6 +330,7 @@ def build_report(
     primary_metric: str,
     narrative_provider,  # callable(payload: dict) -> str
     love_plot_path: Path | None = None,
+    quality=None,  # DataQualityReport | None
 ) -> FinalReport:
     """Stitch the structured results together into a Markdown document.
 
@@ -347,6 +348,8 @@ def build_report(
         "metric_tests": [m.to_dict() for m in metric_results],
         "psm": [p.to_dict() for p in psm_results],
     }
+    if quality is not None and quality.has_issues:
+        payload["data_quality"] = quality.summary_lines()
     narrative = narrative_provider(payload)
 
     verdict_emoji = {
@@ -370,6 +373,17 @@ def build_report(
     md_parts.extend(["", "### Narrative", "", narrative, "", "---", ""])
     md_parts.append(f"_Schema rationale:_ {schema_rationale}")
     md_parts.append("")
+    if quality is not None and quality.has_issues:
+        md_parts.append("### Data quality")
+        md_parts.append("")
+        md_parts.append(
+            f"Loaded {quality.rows_loaded:,} of {quality.rows_in_file:,} rows. "
+            "The loader repaired the following before analysis:"
+        )
+        md_parts.append("")
+        for line in quality.summary_lines():
+            md_parts.append(f"- {line}")
+        md_parts.append("")
     if love_plot_path is not None:
         md_parts.append(f"![Love plot]({love_plot_path.name})")
         md_parts.append("")

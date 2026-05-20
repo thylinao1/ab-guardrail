@@ -1,31 +1,26 @@
-"""LLM agent layer (Anthropic Claude).
+"""LLM layer.
 
-Three modes, increasing in agentic-ness:
+Routing (which column is the variant, which are metrics / covariates) is
+deterministic by default - see :func:`infer_schema_heuristic`. The LLM has
+exactly two, narrowly scoped roles:
 
-* ``mode="none"``    — no LLM. Deterministic schema heuristic + deterministic
-                       narrative. Used in CI, tests, and when no API key is set.
-* ``mode="simple"``  — two LLM calls: one to infer the schema, one to write
-                       the executive summary. Statistical computation stays
-                       deterministic.
-* ``mode="tools"``   — *agentic.* Claude is given three tools
-                       (``run_srm_check``, ``run_metric_test``,
-                       ``run_propensity_score_match``) and decides which to
-                       call, on which columns, in which order. The LLM
-                       drives the analysis; the host runs the math and
-                       returns structured results. Final narrative is
-                       Claude's last message. This is the closest to an
-                       "AI Agent" in the modern (tool-using, multi-turn)
-                       sense.
+* :func:`narrate` - the ONLY LLM call on the default ``pipeline`` path. It
+  turns the finished, deterministic results JSON into a plain-English
+  summary. It never sees raw data and never computes a number.
+* :func:`run_tool_agent` - an OPT-IN tool-use loop (``--mode agent``) for
+  datasets whose column roles cannot be inferred deterministically. It is
+  deliberately not the default: paying LLM latency to route data to three
+  deterministic functions is poor production engineering. It is retained
+  for unfamiliar schemas and as a demonstration of tool-use orchestration.
 
-In every mode the *statistical numbers* in the report come from
-``scipy.stats`` / ``scikit-learn``. The LLM never computes a p-value.
+In every mode the statistical numbers come from ``scipy.stats`` /
+``scikit-learn``. The LLM never computes a p-value.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -43,7 +38,6 @@ from .guardrails import (
     srm_check,
 )
 
-SCHEMA_MODEL = "claude-sonnet-4-5"
 NARRATIVE_MODEL = "claude-sonnet-4-5"
 AGENT_MODEL = "claude-sonnet-4-5"
 
@@ -167,86 +161,8 @@ def infer_schema_heuristic(profile: DatasetProfile) -> SchemaPlan:
 
 
 # ===========================================================================
-# Simple mode: schema inference + narrative as two LLM calls
+# Closing summary: the ONLY LLM call in the default (pipeline) mode
 # ===========================================================================
-
-_SCHEMA_SYSTEM = """You are an experimentation analyst inspecting a CSV from
-an A/B test. Given the column names, dtypes, and sample rows, decide which
-column is the variant/treatment assignment, which numeric columns are
-outcome metrics, and which are pre-treatment covariates suitable for
-propensity-score matching.
-
-Return ONLY a JSON object with this exact shape — no prose, no markdown fences:
-
-{
-  "variant_column": "<column name>",
-  "control_label": "<value in that column>",
-  "treatment_label": "<value in that column>",
-  "primary_metric": "<column name>",
-  "secondary_metrics": ["<column name>", ...],
-  "covariates": ["<column name>", ...],
-  "rationale": "<one or two sentences>"
-}
-
-Rules:
-- variant_column MUST be one of the binary_candidates.
-- primary_metric and secondary_metrics MUST be numeric columns; they MUST
-  NOT include the variant column or any covariate.
-- covariates must be PRE-treatment (e.g. signup_value, device, country).
-  Never use the outcome columns as covariates.
-- A binary outcome (e.g. "converted") is preferred as primary_metric when
-  present; otherwise prefer a continuous outcome with clear business
-  meaning (e.g. revenue).
-"""
-
-
-def infer_schema(
-    profile: DatasetProfile,
-    *,
-    allow_fallback: bool = True,
-) -> SchemaPlan:
-    """Use Claude to map the dataset's columns onto experiment roles.
-
-    Falls back to :func:`infer_schema_heuristic` if ``ANTHROPIC_API_KEY``
-    is not set (and ``allow_fallback=True``).
-    """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        if allow_fallback:
-            return infer_schema_heuristic(profile)
-        raise AgentError("ANTHROPIC_API_KEY not set and allow_fallback=False.")
-
-    try:
-        from anthropic import Anthropic
-    except ImportError as exc:
-        if allow_fallback:
-            return infer_schema_heuristic(profile)
-        raise AgentError(f"anthropic SDK not installed: {exc}") from exc
-
-    client = Anthropic(api_key=api_key)
-    user_payload = {
-        "n_rows": profile.n_rows,
-        "columns": profile.columns,
-        "dtypes": profile.dtypes,
-        "numeric_columns": profile.numeric_columns,
-        "binary_candidates": profile.binary_candidates,
-        "sample_rows": profile.sample_rows,
-    }
-
-    try:
-        msg = client.messages.create(
-            model=SCHEMA_MODEL,
-            max_tokens=600,
-            system=_SCHEMA_SYSTEM,
-            messages=[{"role": "user", "content": json.dumps(user_payload, default=str)}],
-        )
-    except Exception as exc:
-        raise AgentError(f"Schema inference call failed: {exc}") from exc
-
-    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text").strip()
-    plan_dict = _extract_json(text)
-    return _validate_plan(plan_dict, profile)
-
 
 _NARRATIVE_SYSTEM = """You are writing the executive summary for an A/B
 test review. You will be given JSON containing structured statistical
@@ -460,7 +376,7 @@ def run_tool_agent(
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        raise AgentError("ANTHROPIC_API_KEY not set; cannot use --agent tools.")
+        raise AgentError("ANTHROPIC_API_KEY not set; cannot use --mode agent.")
     try:
         from anthropic import Anthropic
     except ImportError as exc:
@@ -606,61 +522,8 @@ def _payload_from_run(run: dict[str, Any], plan: SchemaPlan) -> dict[str, Any]:
 
 
 # ===========================================================================
-# helpers
+# Deterministic (template) narrative
 # ===========================================================================
-
-def _extract_json(text: str) -> dict[str, Any]:
-    """Tolerate code fences or trailing prose from the LLM."""
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
-    candidate = fence.group(1) if fence else text
-    try:
-        return json.loads(candidate)
-    except json.JSONDecodeError as outer_exc:
-        m = re.search(r"\{.*\}", candidate, flags=re.DOTALL)
-        if not m:
-            raise AgentError(
-                f"No JSON object found in LLM response: {text[:200]!r}"
-            ) from outer_exc
-        try:
-            return json.loads(m.group(0))
-        except json.JSONDecodeError as exc:
-            raise AgentError(f"LLM JSON did not parse: {exc}; text={text[:200]!r}") from exc
-
-
-def _validate_plan(plan: dict[str, Any], profile: DatasetProfile) -> SchemaPlan:
-    required = {
-        "variant_column", "control_label", "treatment_label",
-        "primary_metric", "secondary_metrics", "covariates",
-    }
-    missing = required - plan.keys()
-    if missing:
-        raise AgentError(f"LLM schema plan missing fields: {sorted(missing)}")
-    if plan["variant_column"] not in profile.binary_candidates:
-        raise AgentError(
-            f"LLM chose variant_column={plan['variant_column']!r} "
-            f"which is not a binary candidate ({profile.binary_candidates})."
-        )
-    if plan["primary_metric"] not in profile.numeric_columns:
-        raise AgentError(
-            f"LLM chose primary_metric={plan['primary_metric']!r} "
-            f"which is not numeric."
-        )
-    for sm in plan["secondary_metrics"]:
-        if sm not in profile.numeric_columns:
-            raise AgentError(f"secondary metric {sm!r} is not numeric.")
-    for cv in plan["covariates"]:
-        if cv not in profile.columns:
-            raise AgentError(f"covariate {cv!r} not in DataFrame.")
-    return SchemaPlan(
-        variant_column=plan["variant_column"],
-        control_label=str(plan["control_label"]),
-        treatment_label=str(plan["treatment_label"]),
-        primary_metric=plan["primary_metric"],
-        secondary_metrics=list(plan["secondary_metrics"]),
-        covariates=list(plan["covariates"]),
-        rationale=str(plan.get("rationale", "")),
-    )
-
 
 def deterministic_narrative(payload: dict[str, Any]) -> str:
     """No-LLM fallback so the CLI is always usable."""

@@ -29,13 +29,14 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint (ruff)
-        run: ruff check src tests
+        run: ruff check src tests scripts
 
       - name: Test (pytest)
         run: pytest -q --cov=src --cov-report=term-missing
 
-      - name: End-to-end smoke (deterministic mode)
+      - name: End-to-end smoke (offline mode, no API key)
         run: |
           python scripts/generate_data.py
-          python -m src.cli data/clean_experiment.csv --agent none
-          python -m src.cli data/compromised_experiment.csv --agent none
+          python -m src.cli data/clean_experiment.csv --mode offline
+          python -m src.cli data/compromised_experiment.csv --mode offline
+          python -m src.cli data/messy_experiment.csv --mode offline

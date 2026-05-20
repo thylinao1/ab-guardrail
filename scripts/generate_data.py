@@ -26,7 +26,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
 SCHEMA_COLUMNS = [
     "user_id",
     "variant",
@@ -148,6 +147,92 @@ def generate_compromised(n: int = 12_000, seed: int = 7) -> pd.DataFrame:
     return out[SCHEMA_COLUMNS]
 
 
+def write_messy_experiment(path: Path, n: int = 12_000, seed: int = 19) -> dict:
+    """Write messy_experiment.csv: a properly randomised test wrapped in the
+    data-quality pathologies a real e-commerce export carries.
+
+    The underlying experiment is clean (50/50, a real conversion lift), so a
+    pipeline that correctly *cleans* the file should still return SAFE TO
+    ROLL OUT. What is deliberately broken is the file, not the experiment:
+
+    * ~8% missing values in the `pre_signup_value` covariate (consent gates,
+      late joiners)
+    * ~5% missing values in the `device` covariate
+    * a handful of dirty numeric tokens ("ERROR", "NULL") in
+      `pre_signup_value`, forcing the column to text dtype on read
+    * an all-null `experiment_notes` column (instrumented, never populated)
+    * ~25 exact-duplicate rows (an at-least-once logging pipeline)
+    * 3 malformed rows with the wrong field count (a broken log writer)
+
+    Returns a dict of the injected-defect counts for the caller to print.
+    """
+    rng = np.random.default_rng(seed)
+    users = _make_users(n, rng)
+    variant = rng.choice(["control", "treatment"], size=n, p=[0.5, 0.5])
+    treated = (variant == "treatment").astype(int)
+    p_base = (
+        0.08
+        + 0.0010 * users["pre_signup_value"].values
+        + 0.02 * (users["device"].values == "desktop")
+    )
+    converted, revenue = _outcome(p_base, treated, lift=0.04, rng=rng)
+
+    df = users.copy()
+    df["variant"] = variant
+    df["converted"] = converted
+    df["revenue"] = revenue
+    df = df[SCHEMA_COLUMNS].copy()
+
+    # --- inject data-quality defects ---------------------------------------
+    # pre_signup_value: ~8% missing
+    miss_pre = rng.choice(n, size=int(0.08 * n), replace=False)
+    df.loc[miss_pre, "pre_signup_value"] = np.nan
+    # pre_signup_value: a few dirty tokens (forces object dtype on read)
+    dirty_idx = rng.choice(
+        [i for i in range(n) if i not in set(miss_pre)], size=6, replace=False
+    )
+    df["pre_signup_value"] = df["pre_signup_value"].astype(object)
+    for j, i in enumerate(dirty_idx):
+        df.loc[i, "pre_signup_value"] = "ERROR" if j % 2 == 0 else "NULL"
+    # device: ~5% missing
+    miss_dev = rng.choice(n, size=int(0.05 * n), replace=False)
+    df.loc[miss_dev, "device"] = np.nan
+    # an all-null instrumented column
+    df["experiment_notes"] = np.nan
+
+    # ~25 exact-duplicate rows (double-logged events)
+    n_dupes = 25
+    dupe_rows = df.iloc[rng.choice(n, size=n_dupes, replace=False)]
+    df = pd.concat([df, dupe_rows], ignore_index=True)
+
+    # --- serialise, then splice in malformed lines -------------------------
+    # All malformed lines carry MORE fields than the header so pandas'
+    # on_bad_lines="skip" cleanly drops them. (Lines with *fewer* fields are
+    # NaN-padded rather than skipped, which would leak junk into the data.)
+    csv_text = df.to_csv(index=False)
+    lines = csv_text.splitlines()
+    header = lines[0]
+    n_fields = header.count(",") + 1
+    malformed = [
+        ",".join(["999999", "treatment"] + ["junk"] * (n_fields + 1)),
+        ",".join(["999998", "control"] + ["x"] * (n_fields + 4)),
+        ",".join(["not", "a", "valid", "row"] + ["extra"] * n_fields),
+    ]
+    # insert the malformed lines at spread-out positions in the body
+    body = lines[1:]
+    for offset, bad in zip((1000, 5000, 9000), malformed, strict=True):
+        body.insert(min(offset, len(body)), bad)
+    path.write_text("\n".join([header, *body]) + "\n", encoding="utf-8")
+
+    return {
+        "rows_written": len(body) + 1,            # incl. malformed, excl. header
+        "duplicates": n_dupes,
+        "malformed": len(malformed),
+        "missing_pre_signup_value": len(miss_pre) + len(dirty_idx),
+        "missing_device": len(miss_dev),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -166,15 +251,21 @@ def main() -> None:
 
     clean_path = args.out_dir / "clean_experiment.csv"
     comp_path = args.out_dir / "compromised_experiment.csv"
+    messy_path = args.out_dir / "messy_experiment.csv"
     clean.to_csv(clean_path, index=False)
     compromised.to_csv(comp_path, index=False)
+    messy_stats = write_messy_experiment(messy_path, n=args.n)
 
     print(f"Wrote {clean_path}  ({len(clean):,} rows)")
     print(f"Wrote {comp_path}  ({len(compromised):,} rows)")
+    print(f"Wrote {messy_path}  ({messy_stats['rows_written']:,} rows incl. defects)")
     print("\nClean split:")
     print(clean["variant"].value_counts(normalize=True).round(4))
     print("\nCompromised split:")
     print(compromised["variant"].value_counts(normalize=True).round(4))
+    print("\nMessy dataset injected defects:")
+    for k, v in messy_stats.items():
+        print(f"  {k}: {v}")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ab-guardrail"
-version = "0.2.0"
+version = "0.3.0"
 description = "Automated A/B Testing & Causal Inference Agent — CLI guardrail for online experiments."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -25,7 +25,6 @@ dependencies = [
     "pandas>=2.1,<3.0",
     "scipy>=1.11,<2.0",
     "scikit-learn>=1.3,<2.0",
-    "statsmodels>=0.14,<1.0",
     "matplotlib>=3.7,<4.0",
     "anthropic>=0.40,<1.0",
     "python-dotenv>=1.0,<2.0",
