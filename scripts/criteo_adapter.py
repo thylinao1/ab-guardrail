@@ -150,18 +150,22 @@ def adapt_criteo(
 
 
 def _map_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
-    """Apply the Criteo -> ab-guardrail column mapping to one chunk."""
-    df = pd.DataFrame()
-    # treatment 0/1 -> string variant labels
-    t = pd.to_numeric(chunk["treatment"], errors="coerce")
-    df["variant"] = np.where(t == 1, "treatment", "control")
-    # outcomes kept as 0/1
-    df["conversion"] = pd.to_numeric(chunk["conversion"], errors="coerce")
-    df["visit"] = pd.to_numeric(chunk["visit"], errors="coerce")
-    # covariates
+    """Apply the Criteo -> ab-guardrail column mapping to one chunk.
+
+    Every value is extracted with ``.to_numpy()`` so the new frame is built
+    positionally. The incoming chunk has a non-contiguous index after the
+    sampling mask; assigning index-bearing Series would re-align against a
+    fresh RangeIndex and silently NaN out almost every row.
+    """
+    t = pd.to_numeric(chunk["treatment"], errors="coerce").to_numpy()
+    data: dict[str, np.ndarray] = {
+        "variant": np.where(t == 1, "treatment", "control"),
+        "conversion": pd.to_numeric(chunk["conversion"], errors="coerce").to_numpy(),
+        "visit": pd.to_numeric(chunk["visit"], errors="coerce").to_numpy(),
+    }
     for f in RAW_FEATURES:
-        df[f] = pd.to_numeric(chunk[f], errors="coerce")
-    return df[OUTPUT_COLUMNS]
+        data[f] = pd.to_numeric(chunk[f], errors="coerce").to_numpy()
+    return pd.DataFrame(data)[OUTPUT_COLUMNS]
 
 
 def main() -> int:

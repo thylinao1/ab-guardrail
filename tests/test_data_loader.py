@@ -39,7 +39,9 @@ def test_clean_csv_loads_without_quality_issues(tmp_path: Path):
     assert "variant" in profile.binary_candidates
 
 
-def test_duplicate_rows_are_dropped_and_reported(tmp_path: Path):
+def test_duplicate_rows_dropped_when_keyed_on_identifier(tmp_path: Path):
+    """With a user_id column, repeated rows are double-logged events and
+    are dropped on the identifier."""
     base = _base_frame(n=300)
     withdupes = pd.concat([base, base.iloc[:20]], ignore_index=True)
     p = tmp_path / "dupes.csv"
@@ -47,6 +49,29 @@ def test_duplicate_rows_are_dropped_and_reported(tmp_path: Path):
     df, profile = load_experiment_csv(p)
     assert profile.quality.duplicate_rows_dropped == 20
     assert len(df) == 300
+
+
+def test_identical_rows_kept_when_no_identifier_column(tmp_path: Path):
+    """Without a per-row identifier, two distinct entities can legitimately
+    share an identical row (low-cardinality covariates, e.g. Criteo). Such
+    rows must NOT be dropped - this is the bug real Criteo data exposed."""
+    rng = np.random.default_rng(1)
+    n = 600
+    # low-cardinality covariates -> many genuinely identical rows
+    frame = pd.DataFrame(
+        {
+            "variant": rng.choice(["control", "treatment"], size=n),
+            "f0": rng.integers(0, 3, size=n),
+            "f1": rng.integers(0, 3, size=n),
+            "converted": rng.binomial(1, 0.1, size=n),
+        }
+    )
+    p = tmp_path / "no_id.csv"
+    frame.to_csv(p, index=False)
+    df, profile = load_experiment_csv(p)
+    # no identifier column -> nothing dropped, even though rows repeat
+    assert profile.quality.duplicate_rows_dropped == 0
+    assert len(df) == n
 
 
 def test_all_null_column_is_dropped(tmp_path: Path):

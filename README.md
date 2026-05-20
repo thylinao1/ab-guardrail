@@ -253,7 +253,7 @@ silently:
 | Pathology | Handling |
 |---|---|
 | malformed rows (wrong field count) | skipped at parse time, counted |
-| exact-duplicate rows (double-logged) | dropped, counted |
+| double-logged rows | dropped *only* when the file has a per-row identifier and rows repeat on it — without an ID, identical rows (low-cardinality covariates) are kept |
 | all-null columns (instrumented, never populated) | dropped, named |
 | dirty numeric tokens (`ERROR`, `NULL`, `""`) | column coerced to numeric; bad tokens → missing |
 | missing covariate values | reported per column; PSM / metric tests drop incomplete rows per analysis |
@@ -288,6 +288,28 @@ the SRM check compares observed against *planned*, so the planned ratio
 must be passed via `--expected-ratio` or the check false-positives. The
 adapter prints the exact command, including the correct ratio, after it
 runs.
+
+#### Result on a 300k-row Criteo sample
+
+Run against a stratified 300,204-row sample of the 13.98M-row experiment,
+the guardrail returns **SAFE TO ROLL OUT**, which is the correct call for
+a genuine RCT:
+
+- **SRM passes** (χ² p ≈ 0.98) once the 85/15 design ratio is supplied.
+- **Both metrics lift significantly:** conversion 0.18% → 0.31%
+  (+0.13pp, p ≈ 2 × 10⁻⁶); visit 3.69% → 4.86% (+1.17pp, p ≈ 4 × 10⁻²⁷).
+- **PSM barely moves the estimate** — ATT 0.0013 → 0.0010 (conversion) and
+  0.0117 → 0.0101 (visit) across 255,123 matched pairs. That small
+  adjustment is the expected signature of a *truly randomised* experiment
+  (little confounding to remove), and contrasts sharply with the synthetic
+  `compromised_experiment.csv`, where PSM collapses the naive estimate.
+  Rosenbaum Γ ≈ 1.5 indicates moderate robustness to hidden bias.
+
+Validating on Criteo also surfaced — and the test suite now guards
+against — three real-data bugs the synthetic demos could not: identical
+rows wrongly dropped when covariates are low-cardinality, variant labels
+misread from the first few rows under a skewed split, and an
+index-alignment fault in the adapter's sampling path.
 
 ---
 

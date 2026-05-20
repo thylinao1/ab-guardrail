@@ -321,10 +321,18 @@ def propensity_score_match(
     se_paired = float(pair_diffs.std(ddof=1) / np.sqrt(len(pair_diffs)))
 
     rng = np.random.default_rng(random_state)
-    boot_atts = np.empty(bootstrap_samples)
     n_treated_s = len(logit_t)
-    # Pre-sort control logits once (re-used in inner loop).
-    for b in range(bootstrap_samples):
+    # Adaptive resample count: matching is O(n_treated) per resample, so on a
+    # 250k-treated dataset 500 resamples is needlessly slow. Cap the total
+    # matching work at a fixed budget; never go below 100 resamples, which is
+    # still enough for a stable bootstrap SE / percentile CI.
+    _WORK_BUDGET = 20_000_000
+    effective_bootstrap = bootstrap_samples
+    if n_treated_s * bootstrap_samples > _WORK_BUDGET:
+        effective_bootstrap = max(100, _WORK_BUDGET // max(n_treated_s, 1))
+
+    boot_atts = np.empty(effective_bootstrap)
+    for b in range(effective_bootstrap):
         idx_b = rng.integers(0, n_treated_s, size=n_treated_s)
         tb, cb, _ = _match_1nn_with_caliper(logit_t[idx_b], logit_c, caliper)
         if not tb:
@@ -377,6 +385,6 @@ def propensity_score_match(
         rosenbaum=rosenbaum,
         notes=[
             f"caliper (logit units) = {caliper:.4f}",
-            f"bootstrap resamples = {bootstrap_samples}",
+            f"bootstrap resamples = {effective_bootstrap}",
         ],
     )

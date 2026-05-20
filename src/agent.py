@@ -108,18 +108,18 @@ def infer_schema_heuristic(profile: DatasetProfile) -> SchemaPlan:
     )
     if variant_col is None:
         raise AgentError("No binary candidate columns to pick a variant from.")
-    sample_vals = list(
-        {row[variant_col] for row in profile.sample_rows if variant_col in row}
-    )
-    sample_vals_sorted = sorted(
-        sample_vals, key=lambda v: (str(v).lower() != "control", str(v))
-    )
-    if len(sample_vals_sorted) < 2:
+    # Variant labels come from the FULL column (profile.binary_levels), not
+    # from head(5): on a skewed split (e.g. Criteo's 85/15) the first rows
+    # can all carry the same label.
+    levels = list(profile.binary_levels.get(variant_col, []))
+    if len(levels) < 2:
         raise AgentError(
-            "Could not infer two distinct labels for the variant column "
-            "from sample rows."
+            f"Variant column {variant_col!r} does not have two distinct values."
         )
-    control_label, treatment_label = sample_vals_sorted[0], sample_vals_sorted[1]
+    levels_sorted = sorted(
+        levels, key=lambda v: (str(v).lower() != "control", str(v))
+    )
+    control_label, treatment_label = str(levels_sorted[0]), str(levels_sorted[1])
 
     outcomes: list[str] = []
     covariates: list[str] = []
@@ -389,6 +389,7 @@ def run_tool_agent(
         "dtypes": profile.dtypes,
         "numeric_columns": profile.numeric_columns,
         "binary_candidates": profile.binary_candidates,
+        "binary_levels": profile.binary_levels,
         "sample_rows": profile.sample_rows,
     }
     messages: list[dict[str, Any]] = [

@@ -656,11 +656,13 @@ trim  = common-support region</pre>
         </div>
       </div>
       <div class="diag">
-        <div class="head"><div class="name">Validated beyond synthetic data</div><div class="status note">criteo adapter</div></div>
-        <div class="desc">A shipped adapter maps the real Criteo Uplift dataset (~13.9M-row randomised ad experiment) onto the tool&rsquo;s schema. It encodes two real-data lessons: a 0/1 treatment column must be re-labelled, and Criteo&rsquo;s planned split is ~85/15, not 50/50, so the SRM check must be told the design.</div>
+        <div class="head"><div class="name">Validated on the Criteo dataset</div><div class="status pass">14M rows</div></div>
+        <div class="desc">A shipped adapter maps the real Criteo Uplift dataset (13.98M-row randomised ad experiment) onto the tool&rsquo;s schema. On a 300k-row sample the guardrail returns SAFE TO ROLL OUT - the correct call for a genuine RCT: SRM passes, both metrics lift significantly, and PSM barely moves the estimate, the expected signature of true randomisation. The exercise also caught three real-data bugs the synthetic demos could not.</div>
         <div class="stat">
-          <div class="row"><span class="k">messy demo</span><span>messy_experiment.csv</span></div>
-          <div class="row"><span class="k">real data</span><span>scripts/criteo_adapter.py</span></div>
+          <div class="row"><span class="k">Criteo sample</span><span>300,204 rows</span></div>
+          <div class="row"><span class="k">SRM</span><span>&chi;&sup2; p &asymp; 0.98 &middot; passes</span></div>
+          <div class="row"><span class="k">PSM ATT vs naive</span><span>0.0117 &rarr; 0.0101 (visit)</span></div>
+          <div class="row"><span class="k">verdict</span><span style="color:var(--good)">SAFE TO ROLL OUT</span></div>
         </div>
       </div>
     </div>

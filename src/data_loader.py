@@ -70,8 +70,8 @@ class DataQualityReport:
             )
         if self.duplicate_rows_dropped:
             lines.append(
-                f"{self.duplicate_rows_dropped} exact-duplicate row(s) dropped "
-                "(likely double-logged events)"
+                f"{self.duplicate_rows_dropped} row(s) dropped as double-logged "
+                "(repeated on the identifier column)"
             )
         if self.dropped_all_null_columns:
             lines.append(
@@ -99,8 +99,33 @@ class DatasetProfile:
     numeric_columns: list[str]
     categorical_columns: list[str]
     binary_candidates: list[str]      # columns with exactly 2 distinct values
+    binary_levels: dict[str, list[Any]]  # candidate column -> its 2 values
     sample_rows: list[dict[str, Any]]
     quality: DataQualityReport
+
+
+# Column names that identify a per-row entity. A genuine double-logged
+# event is the SAME entity appearing twice, keyed on one of these.
+_IDENTIFIER_TOKENS = {
+    "user_id", "id", "uid", "userid", "session_id", "event_id", "customer_id",
+}
+
+
+def _find_identifier_column(df: pd.DataFrame) -> str | None:
+    """Return a per-row identifier column if one plausibly exists.
+
+    A column qualifies when its name matches a known identifier token AND
+    it is mostly unique (so a categorical column happening to be named
+    'id' is not mistaken for one)."""
+    n = max(len(df), 1)
+    for col in df.columns:
+        if (
+            col.lower() in _IDENTIFIER_TOKENS
+            and df[col].notna().any()
+            and df[col].nunique(dropna=True) / n > 0.5
+        ):
+            return col
+    return None
 
 
 def load_experiment_csv(
@@ -113,8 +138,12 @@ def load_experiment_csv(
     Parameters
     ----------
     path : CSV path.
-    drop_duplicates : drop exact full-row duplicates (default True). Exact
-        duplicates in an A/B log are almost always double-logged events.
+    drop_duplicates : drop double-logged rows (default True). Duplicates are
+        dropped ONLY when the file has a per-row identifier column
+        (user_id, id, ...) and rows repeat on it. Without an identifier,
+        two distinct entities can legitimately share an identical row -
+        common when covariates are low-cardinality (e.g. the Criteo
+        features) - so full-row duplicates are NOT dropped.
 
     Raises
     ------
@@ -141,11 +170,12 @@ def load_experiment_csv(
     # tool's CSV inputs); reported as an estimate either way.
     malformed = _estimate_malformed_rows(csv_path, rows_parsed)
 
-    # --- drop exact-duplicate rows -----------------------------------------
+    # --- drop double-logged rows (only when keyed on an identifier) --------
     dupes = 0
-    if drop_duplicates:
+    id_col = _find_identifier_column(df)
+    if drop_duplicates and id_col is not None:
         before = len(df)
-        df = df.drop_duplicates().reset_index(drop=True)
+        df = df.drop_duplicates(subset=[id_col]).reset_index(drop=True)
         dupes = before - len(df)
 
     # --- drop all-null columns ---------------------------------------------
@@ -240,6 +270,7 @@ def _profile(
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
     binary_candidates: list[str] = []
+    binary_levels: dict[str, list[Any]] = {}
     for col in df.columns:
         # nunique excludes NaN by default
         if df[col].nunique(dropna=True) != 2:
@@ -254,6 +285,11 @@ def _profile(
             if uniq <= {0.0, 1.0}:
                 continue
         binary_candidates.append(col)
+        # The two distinct values, computed from the FULL column - not from
+        # head(5), which on a skewed split (e.g. Criteo's 85/15) can show
+        # only one of the two labels.
+        levels = sorted(df[col].dropna().unique().tolist(), key=str)
+        binary_levels[col] = levels
 
     return DatasetProfile(
         n_rows=int(len(df)),
@@ -262,6 +298,7 @@ def _profile(
         numeric_columns=numeric_cols,
         categorical_columns=categorical_cols,
         binary_candidates=binary_candidates,
+        binary_levels=binary_levels,
         sample_rows=df.head(5).where(pd.notna(df.head(5)), None).to_dict(orient="records"),
         quality=quality,
     )
