@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.agent import infer_schema_heuristic
 from src.data_loader import load_experiment_csv
 from src.exceptions import DataValidationError
 
@@ -123,6 +124,29 @@ def test_missing_covariate_values_are_reported(tmp_path: Path):
     df, profile = load_experiment_csv(p)
     frac = profile.quality.missing_by_column["pre_value"]
     assert abs(frac - 40 / 500) < 1e-9
+
+
+def test_skewed_split_labels_inferred_from_full_column(tmp_path: Path):
+    """Regression: a heavily skewed split (e.g. Criteo's 85/15) can leave
+    the first rows all carrying one label. Variant labels must be read from
+    the full column (profile.binary_levels), not from a head() sample, or
+    deterministic routing fails to find two distinct variants."""
+    n = 500
+    frame = pd.DataFrame(
+        {
+            "user_id": np.arange(n),
+            # sorted so the first rows are entirely 'treatment'
+            "variant": ["treatment"] * 425 + ["control"] * 75,
+            "pre_value": np.random.default_rng(0).normal(size=n),
+            "converted": np.random.default_rng(1).binomial(1, 0.1, size=n),
+        }
+    )
+    p = tmp_path / "skewed.csv"
+    frame.to_csv(p, index=False)
+    df, profile = load_experiment_csv(p)
+    assert set(profile.binary_levels["variant"]) == {"control", "treatment"}
+    plan = infer_schema_heuristic(profile)
+    assert {plan.control_label, plan.treatment_label} == {"control", "treatment"}
 
 
 def test_missing_file_raises(tmp_path: Path):

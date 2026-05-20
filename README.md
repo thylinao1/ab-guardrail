@@ -145,7 +145,7 @@ ab_testing_agent/
 │       ├── srm.py            chi-square SRM
 │       ├── metric_tests.py   Welch / MW / Newcombe / BH-FDR / CUPED
 │       └── causal.py         PSM with trimming, bootstrap SE, Rosenbaum
-└── tests/                    pytest suite (35 tests)
+└── tests/                    pytest suite (36 tests)
     ├── conftest.py
     ├── test_srm.py
     ├── test_metric_tests.py
