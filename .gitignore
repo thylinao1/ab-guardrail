@@ -30,3 +30,11 @@ venv/
 reports/*.md
 reports/*.png
 !reports/.gitkeep
+
+# Criteo Uplift dataset - large (~297 MB gzipped, ~3.2 GB raw).
+# Download locally; see scripts/criteo_adapter.py. Never commit.
+data/criteo-uplift*.csv
+data/criteo-uplift*.csv.gz
+data/criteo-research-uplift*.csv
+data/criteo-research-uplift*.csv.gz
+data/criteo_ready.csv
