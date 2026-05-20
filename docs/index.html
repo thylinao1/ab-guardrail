@@ -279,8 +279,8 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ink)
       <div class="l">LLM call on the default path - the closing summary. Routing &amp; statistics are deterministic Python.</div>
     </div>
     <div class="hero-stat">
-      <div class="v">30</div>
-      <div class="l">Pytest cases - including a messy-data suite - green in CI on Python 3.10-3.12.</div>
+      <div class="v">35</div>
+      <div class="l">Pytest cases - including messy-data and Criteo-adapter suites - green in CI on Python 3.10-3.12.</div>
     </div>
     <div class="hero-stat">
       <div class="v">7</div>
@@ -360,7 +360,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ink)
     <div class="pipeline">
       <div class="pipe-row"><div class="stage"><span class="num">01</span><span class="name">load</span></div><div><div class="ttl">Defensive ingestion &amp; data-quality report</div><div class="desc"><span class="mono">data_loader.py</span> ingests the CSV the way a real e-commerce export demands: malformed rows skipped, double-logged duplicates and all-null columns dropped, dirty numeric tokens coerced. Every repair is counted into a <span class="mono">DataQualityReport</span> - nothing is fixed silently - and the cleaned frame is profiled into a typed <span class="mono">DatasetProfile</span>.</div><div class="meta">DataQualityReport · DatasetProfile · raises DataValidationError</div></div></div>
       <div class="pipe-row"><div class="stage"><span class="num">02</span><span class="name">route</span></div><div><div class="ttl">Deterministic routing - no LLM in the hot path</div><div class="desc">A hardcoded heuristic identifies the variant column, the metrics and the pre-treatment covariates. Paying LLM latency to dispatch data to three deterministic functions is poor production engineering, so the default path does not. An opt-in <span class="mono">--mode agent</span> uses a Claude tool-use loop instead, for unfamiliar schemas where the heuristic cannot infer roles.</div><div class="meta">agent.py · infer_schema_heuristic() · --mode agent for tool-use</div></div></div>
-      <div class="pipe-row"><div class="stage"><span class="num">03</span><span class="name">guardrails</span></div><div><div class="ttl">Three statistical engines, fully deterministic</div><div class="desc"><span class="mono">srm.py</span> - chi-square goodness-of-fit. <span class="mono">metric_tests.py</span> - Welch + Mann-Whitney or chi-square + Newcombe CI, plus BH-FDR correction and CUPED. <span class="mono">causal.py</span> - PSM with common-support trimming, bootstrap SE and Rosenbaum bounds.</div><div class="meta">pure functions · typed dataclass results · 30 pytest cases</div></div></div>
+      <div class="pipe-row"><div class="stage"><span class="num">03</span><span class="name">guardrails</span></div><div><div class="ttl">Three statistical engines, fully deterministic</div><div class="desc"><span class="mono">srm.py</span> - chi-square goodness-of-fit. <span class="mono">metric_tests.py</span> - Welch + Mann-Whitney or chi-square + Newcombe CI, plus BH-FDR correction and CUPED. <span class="mono">causal.py</span> - PSM with common-support trimming, bootstrap SE and Rosenbaum bounds.</div><div class="meta">pure functions · typed dataclass results · 35 pytest cases</div></div></div>
       <div class="pipe-row"><div class="stage"><span class="num">04</span><span class="name">report</span></div><div><div class="ttl">Verdict logic &amp; Markdown render</div><div class="desc"><span class="mono">report.py</span> applies a deterministic verdict rule (the LLM does not vote), renders a Markdown report with a love-plot of pre/post covariate balance, and Claude writes a plain-English summary constrained strictly to the computed numbers.</div><div class="meta">SAFE TO ROLL OUT · EXPERIMENT COMPROMISED · NO SIGNIFICANT EFFECT</div></div></div>
     </div>
   </div>
@@ -535,7 +535,7 @@ trim  = common-support region</pre>
       <div>
         <h2 class="display display-l" style="margin:0 0 16px;max-width:24ch">The LLM writes the summary. It does not run the pipeline.</h2>
         <div class="body-prose">
-          <p>An earlier draft of this project put a Claude tool-use loop in charge of routing - the model decided which check to run on which column. It worked, but it was the wrong call: paying LLM latency and cost to dispatch data to three deterministic functions is not how you build a production data tool.</p>
+          <p>A tool-use loop could put the LLM in charge of routing - letting the model decide which check to run on which column. It works, but it is the wrong call for production: paying LLM latency and cost to dispatch data to three deterministic functions is not how a production data tool should be built.</p>
           <p>So the default <span class="mono">pipeline</span> mode routes deterministically - a hardcoded heuristic - and invokes the LLM <strong>exactly once</strong>, at the very end, to turn the finished results JSON into a plain-English summary. That is the one place a language model genuinely adds value. The verdict itself is decided by deterministic code; the summary may not contradict it or introduce a number that is not in the JSON.</p>
           <p>The tool-use agent still ships, as opt-in <span class="mono">--mode agent</span>, for datasets whose column roles a heuristic cannot infer. Knowing when <em>not</em> to spend the LLM is part of the design.</p>
         </div>
@@ -804,7 +804,7 @@ trim  = common-support region</pre>
       <div class="skill"><div class="n">02</div><div class="t">Causal inference</div><div class="d">Propensity score matching with caliper, common-support trimming, bootstrap standard errors, and Rosenbaum sensitivity bounds for hidden bias.</div></div>
       <div class="skill"><div class="n">03</div><div class="t">Statistical rigour</div><div class="d">Newcombe hybrid-score intervals over Wald, Welch over Student, Mann-Whitney as a non-parametric check, BH-FDR for multiplicity, CUPED for variance reduction.</div></div>
       <div class="skill"><div class="n">04</div><div class="t">Pragmatic LLM engineering</div><div class="d">The LLM is scoped to one job - the closing summary - because routing data to deterministic functions does not need a model. A tool-use agent ships opt-in for unfamiliar schemas: knowing when not to spend the LLM is the point.</div></div>
-      <div class="skill"><div class="n">05</div><div class="t">Production-shaped Python</div><div class="d">Typed dataclasses, a custom exception hierarchy, pure guardrail functions, a 30-test pytest suite, ruff lint, and an installable package with a console entry point.</div></div>
+      <div class="skill"><div class="n">05</div><div class="t">Production-shaped Python</div><div class="d">Typed dataclasses, a custom exception hierarchy, pure guardrail functions, a 35-test pytest suite, ruff lint, and an installable package with a console entry point.</div></div>
       <div class="skill"><div class="n">06</div><div class="t">Reproducibility</div><div class="d">A deterministic no-LLM mode for byte-stable CI, GitHub Actions across Python 3.10-3.12, pinned dependencies, and a synthetic data generator shipped with the repo.</div></div>
     </div>
   </div>
@@ -828,7 +828,7 @@ trim  = common-support region</pre>
 <section class="cta">
   <div class="eyebrow" style="margin-bottom:18px">End of case study</div>
   <h2 class="display display-xl" style="margin:0 auto 18px;max-width:24ch">Read the source, the tests, and the two demo reports.</h2>
-  <p class="body-prose" style="max-width:58ch;margin:0 auto 32px;color:var(--ink-3)">The repository contains the three guardrail engines, the deterministic routing pipeline, the opt-in tool-use agent, the verdict logic, a 30-test pytest suite running in CI on Python 3.10-3.12, the defensive CSV loader, the three demo datasets, and the Criteo adapter.</p>
+  <p class="body-prose" style="max-width:58ch;margin:0 auto 32px;color:var(--ink-3)">The repository contains the three guardrail engines, the deterministic routing pipeline, the opt-in tool-use agent, the verdict logic, a 35-test pytest suite running in CI on Python 3.10-3.12, the defensive CSV loader, the three demo datasets, and the Criteo adapter.</p>
   <a class="cta-btn" href="https://github.com/thylinao1/ab-guardrail" target="_blank" rel="noreferrer">Open the repository <span style="opacity:.6">&#8599;</span></a>
   <div class="footer wrap">
     <div>Maksim Silchenko · 2026 · The Experimentation Guardrail Agent</div>

@@ -1,6 +1,6 @@
 """Adapter: Criteo Uplift Modeling dataset -> ab-guardrail schema.
 
-The Criteo Uplift dataset is a real, large-scale (~13.9M-row) randomised
+The Criteo Uplift dataset is a real, large-scale (~13.98M-row) randomised
 advertising experiment released by Criteo. It is the closest public stand-in
 for the kind of e-commerce A/B log this tool is built for, and it is far
 messier than the synthetic demos: 12 anonymised numeric features, heavy
@@ -51,7 +51,7 @@ then:
 
     ab-guardrail data/criteo_ready.csv --mode pipeline
 
-Sampling is recommended: PSM with a bootstrap on 13.9M rows is slow. A
+Sampling is recommended: PSM with a bootstrap on 13.98M rows is slow. A
 stratified 300k-row sample preserves the treatment split and the (low)
 conversion rate while keeping a run to a few seconds.
 """
@@ -87,7 +87,7 @@ def adapt_criteo(
     sample   : if set, take a stratified random sample of this many rows
                (stratified on the treatment column so the split is held).
                Pass None to keep every row.
-    chunksize: rows per read chunk - keeps memory flat on the 13.9M-row file.
+    chunksize: rows per read chunk - keeps memory flat on the 13.98M-row file.
     seed     : RNG seed for reproducible sampling.
 
     Returns a dict of summary stats.

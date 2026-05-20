@@ -145,7 +145,7 @@ ab_testing_agent/
 │       ├── srm.py            chi-square SRM
 │       ├── metric_tests.py   Welch / MW / Newcombe / BH-FDR / CUPED
 │       └── causal.py         PSM with trimming, bootstrap SE, Rosenbaum
-└── tests/                    pytest suite (30 tests)
+└── tests/                    pytest suite (35 tests)
     ├── conftest.py
     ├── test_srm.py
     ├── test_metric_tests.py
@@ -265,7 +265,7 @@ section of the Markdown report.
 
 The synthetic demos have a known ground truth; real data does not.
 `scripts/criteo_adapter.py` maps the public **Criteo Uplift Modeling
-dataset** (~13.9M-row randomised advertising experiment, 12 anonymised
+dataset** (~13.98M-row randomised advertising experiment, 12 anonymised
 features) onto this tool's schema:
 
 ```bash

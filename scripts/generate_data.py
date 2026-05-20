@@ -1,5 +1,5 @@
 """
-Generate two synthetic A/B-test datasets for the experimentation guardrail agent.
+Generate three synthetic A/B-test datasets for the experimentation guardrail.
 
 1. clean_experiment.csv
    - 50/50 allocation between control and treatment
@@ -7,14 +7,20 @@ Generate two synthetic A/B-test datasets for the experimentation guardrail agent
    - Small but real treatment effect on conversion + revenue
 
 2. compromised_experiment.csv
-   - 45/55 allocation between control and treatment  (Sample Ratio Mismatch)
+   - 61/39 allocation between control and treatment  (Sample Ratio Mismatch)
    - Treatment users skew toward higher pre_signup_value
      (the variant assignment is correlated with a covariate, breaking
       the random-assignment assumption)
    - The *naive* lift looks huge; once we propensity-match on the covariates,
      most or all of the lift evaporates.
 
-Both files share the same schema, so the agent's schema-inference logic
+3. messy_experiment.csv
+   - A properly randomised experiment (50/50, a real lift) wrapped in
+     real-world data-quality defects: missing covariate values, dirty
+     numeric tokens, an all-null column, duplicate rows, and malformed
+     rows. See write_messy_experiment() for the full list.
+
+All three files share the same core schema, so the schema-inference logic
 sees a consistent shape regardless of which one is fed in.
 """
 
@@ -108,7 +114,7 @@ def generate_compromised(n: int = 12_000, seed: int = 7) -> pd.DataFrame:
     """
     Two things are wrong with this experiment:
 
-    1. SRM — the assignment rate is 45/55 instead of 50/50 (e.g. a broken
+    1. SRM — the assignment rate is ~61/39 instead of 50/50 (e.g. a broken
        feature flag dropped some control users).
     2. Confounding — the assignment probability depends on
        pre_signup_value AND device, so treatment systematically gets
