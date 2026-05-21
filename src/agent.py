@@ -172,7 +172,7 @@ concise 4-6 sentence summary suitable for a launch-decision document.
 Strict rules:
 - Do NOT introduce numbers that are not in the JSON.
 - Do NOT contradict the verdict field.
-- If srm_detected is true, OPEN with the SRM finding — it dominates
+- If srm_detected is true, OPEN with the SRM finding - it dominates
   everything else.
 - Mention the gap between naive_effect and psm_att when it is meaningful
   (>= 50% relative shrinkage or sign change).
@@ -220,11 +220,11 @@ def narrate(results_payload: dict[str, Any], *, allow_fallback: bool = True) -> 
 _AGENT_SYSTEM = """You are an experimentation guardrail agent. You have
 three tools that run statistical procedures on the user's A/B-test data:
 
-1. `run_srm_check` — chi-square test for Sample Ratio Mismatch on the
+1. `run_srm_check` - chi-square test for Sample Ratio Mismatch on the
    variant allocation.
-2. `run_metric_test` — Welch's t-test + Mann-Whitney U (continuous) or
+2. `run_metric_test` - Welch's t-test + Mann-Whitney U (continuous) or
    chi-square + Newcombe CI (binary) for a single metric column.
-3. `run_propensity_score_match` — 1-NN PSM with caliper, bootstrap SE,
+3. `run_propensity_score_match` - 1-NN PSM with caliper, bootstrap SE,
    and Rosenbaum sensitivity bounds for a single outcome metric.
 
 Strategy (follow this exactly):
@@ -233,7 +233,7 @@ Step 1. From the dataset profile in the user message, identify the
         variant column, control/treatment labels, primary metric, any
         secondary metrics, and pre-treatment covariates. Do not pick
         outcome columns as covariates or vice versa.
-Step 2. Call `run_srm_check` first — if SRM is detected, the experiment
+Step 2. Call `run_srm_check` first - if SRM is detected, the experiment
         is compromised regardless of metric results.
 Step 3. Call `run_metric_test` for the primary metric, then each
         secondary metric.
@@ -371,7 +371,7 @@ def run_tool_agent(
     """Run the tool-use agent. Returns the structured results + narrative.
 
     Falls through to :func:`AgentError` if the API key is missing or the
-    SDK is not installed — the caller is responsible for catching and
+    SDK is not installed - the caller is responsible for catching and
     degrading to ``simple`` or ``none`` mode.
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY")

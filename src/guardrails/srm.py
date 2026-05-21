@@ -4,7 +4,7 @@ The randomizer in a properly functioning experiment should produce an
 observed allocation indistinguishable from the planned allocation. We
 test that with a one-degree-of-freedom chi-square goodness-of-fit test.
 
-A p-value below 0.001 is the conventional "this is broken" threshold —
+A p-value below 0.001 is the conventional "this is broken" threshold -
 it is intentionally stricter than 0.05 because, under the null, even a
 correctly-running test will occasionally hit p<0.05 by chance, and an SRM
 investigation is expensive enough that we don't want to chase false alarms.
@@ -88,7 +88,7 @@ def srm_check(
     if (expected < 5).any():
         # Chi-square approximation degrades with tiny expected cells.
         raise StatisticalCheckError(
-            "Expected counts below 5 in at least one cell — sample is too "
+            "Expected counts below 5 in at least one cell - sample is too "
             "small for a reliable chi-square SRM test."
         )
 

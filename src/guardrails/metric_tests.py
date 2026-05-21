@@ -6,7 +6,7 @@ We pick the test based on the metric's shape:
   contingency table, with a **Newcombe (1998) hybrid-score 95% CI** on the
   difference of proportions. The Newcombe interval has materially better
   coverage than a Wald interval, especially when proportions are near 0
-  or 1 — see Newcombe, *Statistics in Medicine* 17:873 (1998).
+  or 1 - see Newcombe, *Statistics in Medicine* 17:873 (1998).
 * Continuous metric    -> Welch's t-test for the mean shift, plus a
   Mann-Whitney U as a non-parametric robustness check that does NOT
   assume normality. Both p-values are reported.
@@ -130,7 +130,7 @@ def _newcombe_diff_ci(
 ) -> tuple[float, float]:
     """Newcombe (1998) hybrid-score CI for (p2 - p1).
 
-    Method 10 in the original paper — converts Wilson intervals on the
+    Method 10 in the original paper - converts Wilson intervals on the
     two individual proportions into an interval on the difference.
     Reference: Newcombe RG, Statistics in Medicine 17:873-890 (1998).
     """
@@ -165,7 +165,7 @@ def _binary_test(
         )
     chi2, p_chi, _, _ = stats.chi2_contingency(contingency, correction=False)
 
-    # Newcombe hybrid-score 95% CI on (p_t - p_c) — much better coverage
+    # Newcombe hybrid-score 95% CI on (p_t - p_c) - much better coverage
     # than Wald, especially near 0/1 (Newcombe 1998).
     diff = p_t - p_c
     ci_low, ci_high = _newcombe_diff_ci(s_c, n_c, s_t, n_t, alpha=0.05)

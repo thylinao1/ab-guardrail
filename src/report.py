@@ -87,7 +87,7 @@ def decide_verdict(
         if sign_flip and naive_appears_significant:
             reasons.append(
                 f"PSM sign flip for {primary_metric}: naive={naive:+.4f}, ATT={att:+.4f}. "
-                "A statistically significant naive effect reverses after adjustment — "
+                "A statistically significant naive effect reverses after adjustment - "
                 "confounding likely."
             )
             return VERDICT_COMPROMISED, reasons
@@ -97,7 +97,7 @@ def decide_verdict(
                 f"{att:+.4f} after PSM (<{int(SHRINKAGE_THRESHOLD * 100)}% of naive) "
                 f"and its bootstrap 95% CI "
                 f"[{primary_psm.psm_ci_low:+.4f}, {primary_psm.psm_ci_high:+.4f}] "
-                "covers zero — the effect is not robust to covariate adjustment."
+                "covers zero - the effect is not robust to covariate adjustment."
             )
             return VERDICT_COMPROMISED, reasons
 
@@ -177,7 +177,7 @@ def _metric_section(metrics: list[MetricTestResult]) -> str:
     lines.append("| " + " | ".join(align) + " |")
     for m in metrics:
         ci = f"[{m.ci_low:+.4f}, {m.ci_high:+.4f}]"
-        sec_p = "—" if m.secondary_p_value is None else _fmt_pvalue(m.secondary_p_value)
+        sec_p = "-" if m.secondary_p_value is None else _fmt_pvalue(m.secondary_p_value)
         row = [
             f"`{m.metric}`",
             m.kind,
@@ -188,7 +188,7 @@ def _metric_section(metrics: list[MetricTestResult]) -> str:
             _fmt_pvalue(m.primary_p_value),
         ]
         if show_adjusted:
-            row.append("—" if m.adjusted_p_value is None else _fmt_pvalue(m.adjusted_p_value))
+            row.append("-" if m.adjusted_p_value is None else _fmt_pvalue(m.adjusted_p_value))
         row += [sec_p, f"{m.effect_size:+.3f} ({m.effect_size_kind})"]
         lines.append("| " + " | ".join(row) + " |")
     if metrics and metrics[0].kind == "binary":
@@ -226,7 +226,7 @@ def _psm_section(psm_results: list[PSMResult]) -> str:
         )
         lines.append(
             f"- Bootstrap SE: **{p.psm_se_bootstrap:.4f}**  "
-            f"(naive paired-t SE: {p.psm_se_paired_t:.4f} — biased under "
+            f"(naive paired-t SE: {p.psm_se_paired_t:.4f} - biased under "
             "matching-with-replacement; reported for comparison only)"
         )
         lines.append(
@@ -263,7 +263,7 @@ def _psm_section(psm_results: list[PSMResult]) -> str:
             if p.rosenbaum.gamma_critical is None:
                 lines.append("")
                 lines.append(
-                    "_All Γ in grid keep p ≤ 0.05 — the finding is robust to the tested levels of hidden bias._"
+                    "_All Γ in grid keep p ≤ 0.05 - the finding is robust to the tested levels of hidden bias._"
                 )
             else:
                 lines.append("")
@@ -310,7 +310,7 @@ def render_love_plot(
     ax.axvline(-0.1, color="black", linestyle=":", linewidth=0.5, alpha=0.6)
     ax.set_yticks(y, keys)
     ax.set_xlabel("Standardised mean difference")
-    ax.set_title(f"Covariate balance — `{p.metric}`")
+    ax.set_title(f"Covariate balance - `{p.metric}`")
     ax.legend(loc="lower right", frameon=False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)
     fig.tight_layout()
@@ -335,7 +335,7 @@ def build_report(
     """Stitch the structured results together into a Markdown document.
 
     The narrative is computed *after* the verdict is known so the LLM
-    sees the same payload that decided the verdict — we pass a callable
+    sees the same payload that decided the verdict - we pass a callable
     rather than a string so callers don't have to do the dance themselves.
     """
     verdict, reasons = decide_verdict(srm, metric_results, psm_results, primary_metric)

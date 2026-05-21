@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ab-guardrail"
 version = "0.3.0"
-description = "Automated A/B Testing & Causal Inference Agent — CLI guardrail for online experiments."
+description = "Automated A/B Testing & Causal Inference Agent - CLI guardrail for online experiments."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Maksim Silchenko" }]

@@ -49,7 +49,7 @@ def balanced_experiment(rng: np.random.Generator) -> pd.DataFrame:
 
 @pytest.fixture
 def srm_experiment(rng: np.random.Generator) -> pd.DataFrame:
-    """Experiment with a deliberate 40/60 split — should fire SRM."""
+    """Experiment with a deliberate 40/60 split - should fire SRM."""
     n = 5_000
     variant = rng.choice(["control", "treatment"], size=n, p=[0.4, 0.6])
     converted = rng.binomial(1, 0.10, size=n)
@@ -68,7 +68,7 @@ def confounded_experiment(rng: np.random.Generator) -> pd.DataFrame:
 
     The true treatment effect on `revenue` is zero, but treatment users
     systematically have higher `pre_signup_value`, which itself drives
-    revenue — so the naive comparison shows a large positive lift.
+    revenue - so the naive comparison shows a large positive lift.
     PSM matching on pre_signup_value should shrink the estimate toward 0.
     """
     n = 5_000

@@ -13,7 +13,7 @@ PSM corrects for this by:
 3. For each surviving treated unit, finding the control unit with the
    nearest propensity score (1-NN, **with replacement**) within a
    caliper of `caliper_sd` * SD(logit propensity).
-4. Computing the average outcome difference across matched pairs —
+4. Computing the average outcome difference across matched pairs -
    the Average Treatment effect on the Treated (ATT).
 5. **Bootstrap SE on the ATT**: the matched-with-replacement design
    re-uses controls and so violates the i.i.d. assumption of the paired-t
@@ -57,7 +57,7 @@ class RosenbaumBounds:
     """Sensitivity of the matched ATT to a hidden binary confounder with
     odds ratio Gamma on treatment assignment. We report the smallest
     Gamma at which the upper-bound p-value (Wilcoxon signed-rank) exceeds
-    0.05 — i.e. the strength of unmeasured bias required to overturn the
+    0.05 - i.e. the strength of unmeasured bias required to overturn the
     finding.
     """
     gamma_grid: list[float]
@@ -75,7 +75,7 @@ class PSMResult:
     naive_effect: float
     psm_att: float                          # average treatment effect on the treated
     psm_se_paired_t: float                  # naive paired-t SE (biased; for comparison)
-    psm_se_bootstrap: float                 # block-bootstrap SE — recommended
+    psm_se_bootstrap: float                 # block-bootstrap SE - recommended
     psm_ci_low: float                       # CI from bootstrap
     psm_ci_high: float
     psm_p_value: float                      # bootstrap two-sided p
@@ -200,7 +200,7 @@ def _rosenbaum_bounds(
         z = (observed - mean) / np.sqrt(var)
         # One-sided p in the direction of the observed effect.
         # For an observed positive Wilcoxon T (treated > control), we
-        # care about Pr(T >= observed) — i.e. survival.
+        # care about Pr(T >= observed) - i.e. survival.
         return float(stats.norm.sf(z))
 
     upper_ps: list[float] = []
@@ -282,11 +282,11 @@ def propensity_score_match(
 
     if not in_support.any():
         raise StatisticalCheckError(
-            "No units inside the common-support region — covariate "
+            "No units inside the common-support region - covariate "
             "distributions do not overlap."
         )
 
-    # `work_s` is intentionally elided — once we have aligned numpy views,
+    # `work_s` is intentionally elided - once we have aligned numpy views,
     # we don't need the dropped-DataFrame any further in this function.
     t_s = t[in_support]
     y_s = y[in_support]
@@ -295,7 +295,7 @@ def propensity_score_match(
 
     if t_s.sum() == 0 or (1 - t_s).sum() == 0:
         raise StatisticalCheckError(
-            "Common-support trimming removed all of one arm — refusing to match."
+            "Common-support trimming removed all of one arm - refusing to match."
         )
 
     caliper = caliper_sd * float(np.std(logit_s, ddof=1))

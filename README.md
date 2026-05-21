@@ -3,12 +3,12 @@
 A command-line guardrail for online experiments. Point it at an A/B-test
 CSV and it will:
 
-1. **Load and clean the file defensively** — skip malformed rows, drop
+1. **Load and clean the file defensively** - skip malformed rows, drop
    exact-duplicate (double-logged) rows and all-null columns, coerce dirty
    numeric columns, and report every repair in a data-quality summary.
-2. **Route deterministically** — a hardcoded heuristic identifies the
+2. **Route deterministically** - a hardcoded heuristic identifies the
    variant column, metrics, and covariates. No LLM in this hot path.
-3. Run a **Chi-square Sample Ratio Mismatch (SRM)** test on the allocation —
+3. Run a **Chi-square Sample Ratio Mismatch (SRM)** test on the allocation -
    the single most under-checked failure mode in industry A/B testing.
 4. Run **Welch's t-test + Mann-Whitney U** on continuous metrics, and a
    **2-proportion chi-square** + **Newcombe hybrid-score 95% CI** (Newcombe,
@@ -22,18 +22,18 @@ CSV and it will:
    SE is biased under matching with replacement; Abadie & Imbens 2006),
    and **Rosenbaum sensitivity bounds** for hidden bias (Rosenbaum 2002).
 7. Optionally apply **CUPED** variance reduction (Deng et al. WSDM 2013).
-8. Emit a structured Markdown report with a launch verdict —
-   `SAFE TO ROLL OUT`, `EXPERIMENT COMPROMISED`, or `NO SIGNIFICANT EFFECT` —
+8. Emit a structured Markdown report with a launch verdict -
+   `SAFE TO ROLL OUT`, `EXPERIMENT COMPROMISED`, or `NO SIGNIFICANT EFFECT` -
    a love-plot PNG of pre/post covariate balance, and a plain-English
    executive summary.
 
 **Where the LLM fits.** Routing and statistics are a plain, deterministic
-Python pipeline — paying LLM latency and cost to dispatch data to three
+Python pipeline - paying LLM latency and cost to dispatch data to three
 deterministic functions is poor production engineering. The LLM is invoked
 **exactly once, at the very end**, to turn the finished results JSON into
 the executive summary. A tool-use *agent* mode is available opt-in
 (`--mode agent`) for datasets whose column roles cannot be inferred
-deterministically — useful, but deliberately not the default. The LLM
+deterministically - useful, but deliberately not the default. The LLM
 never computes a number; every statistic comes from `scipy.stats` /
 `scikit-learn`.
 
@@ -63,9 +63,9 @@ This tool does the four things every serious experimentation review needs:
 
 | Mode | Routing | Final summary | When to use |
 |---|---|---|---|
-| `--mode pipeline` (**default**) | deterministic heuristic — no LLM | one LLM call on the finished JSON | Production. No LLM in the hot path. |
+| `--mode pipeline` (**default**) | deterministic heuristic - no LLM | one LLM call on the finished JSON | Production. No LLM in the hot path. |
 | `--mode agent` (opt-in) | Claude tool-use loop | agent's closing turn | Unfamiliar schemas where deterministic routing fails. Slower, costlier. |
-| `--mode offline` | deterministic heuristic — no LLM | template (no API) | CI, offline runs. Byte-stable. |
+| `--mode offline` | deterministic heuristic - no LLM | template (no API) | CI, offline runs. Byte-stable. |
 
 In every mode the statistical numbers are computed deterministically by
 `scipy.stats` and `scikit-learn`. The LLM never computes a p-value, and on
@@ -163,7 +163,7 @@ ab_testing_agent/
 pip install -e ".[dev]"
 
 # 2. (Optional) set an API key for the closing summary
-cp .env.example .env       # add ANTHROPIC_API_KEY — or skip and use --mode offline
+cp .env.example .env       # add ANTHROPIC_API_KEY - or skip and use --mode offline
 
 # 3. Generate the three demo datasets
 python scripts/generate_data.py
@@ -182,7 +182,7 @@ Reports land in `reports/<csv_stem>_report.md` alongside a
 
 Default `--mode pipeline` routes deterministically and makes a single LLM
 call for the closing summary. If `ANTHROPIC_API_KEY` is unset it silently
-falls back to a template summary — the verdict and every statistic are
+falls back to a template summary - the verdict and every statistic are
 identical either way.
 
 ### Fully offline
@@ -200,7 +200,7 @@ ab-guardrail data/clean_experiment.csv --cuped pre_signup_value
 ```
 
 CUPED uses a pre-experiment covariate to reduce variance of the primary
-metric — tighter confidence intervals on the same effect. When CUPED is
+metric - tighter confidence intervals on the same effect. When CUPED is
 applied, PSM is skipped for the adjusted metric (CUPED has already done the
 covariate adjustment parametrically).
 
@@ -224,22 +224,22 @@ ab-guardrail my_data.csv \
 All three share the schema `(user_id, variant, pre_signup_value, device,
 country, converted, revenue)` with 12,000 users.
 
-**`clean_experiment.csv`** — properly randomised. Verdict **SAFE TO ROLL
+**`clean_experiment.csv`** - properly randomised. Verdict **SAFE TO ROLL
 OUT**: SRM not detected, conversion lift ≈ +3.4pp (p ≈ 7 × 10⁻⁸),
 PSM-adjusted ATT in the same direction.
 
-**`compromised_experiment.csv`** — two simultaneous problems: a 61/39 split
+**`compromised_experiment.csv`** - two simultaneous problems: a 61/39 split
 (SRM) and variant assignment correlated with `pre_signup_value` and
 `device` (confounding). Verdict **EXPERIMENT COMPROMISED**, primarily
 citing the SRM (p ≈ 2 × 10⁻¹³²); PSM shows the naive revenue lift shrink
 under adjustment.
 
-**`messy_experiment.csv`** — the experiment is *clean* (50/50, a real
+**`messy_experiment.csv`** - the experiment is *clean* (50/50, a real
 lift); the **file** is broken, the way a real export is: ~8% missing
 `pre_signup_value`, ~5% missing `device`, dirty `ERROR`/`NULL` tokens in a
 numeric column, an all-null `experiment_notes` column, 25 duplicate rows,
 and 3 malformed rows. The loader repairs all of it, reports each repair,
-and the pipeline still returns **SAFE TO ROLL OUT** — demonstrating that
+and the pipeline still returns **SAFE TO ROLL OUT** - demonstrating that
 data-quality defects do not silently corrupt the verdict.
 
 ---
@@ -253,7 +253,7 @@ silently:
 | Pathology | Handling |
 |---|---|
 | malformed rows (wrong field count) | skipped at parse time, counted |
-| double-logged rows | dropped *only* when the file has a per-row identifier and rows repeat on it — without an ID, identical rows (low-cardinality covariates) are kept |
+| double-logged rows | dropped *only* when the file has a per-row identifier and rows repeat on it - without an ID, identical rows (low-cardinality covariates) are kept |
 | all-null columns (instrumented, never populated) | dropped, named |
 | dirty numeric tokens (`ERROR`, `NULL`, `""`) | column coerced to numeric; bad tokens → missing |
 | missing covariate values | reported per column; PSM / metric tests drop incomplete rows per analysis |
@@ -281,9 +281,9 @@ ab-guardrail data/criteo_ready.csv --mode pipeline \
 ```
 
 Two real-data lessons are baked into the adapter. First, Criteo encodes
-treatment as a 0/1 column — the loader deliberately excludes numeric 0/1
+treatment as a 0/1 column - the loader deliberately excludes numeric 0/1
 columns from variant candidates, so the adapter remaps it to string
-labels. Second, **Criteo is designed with an ~85/15 split, not 50/50** —
+labels. Second, **Criteo is designed with an ~85/15 split, not 50/50** -
 the SRM check compares observed against *planned*, so the planned ratio
 must be passed via `--expected-ratio` or the check false-positives. The
 adapter prints the exact command, including the correct ratio, after it
@@ -298,15 +298,15 @@ a genuine RCT:
 - **SRM passes** (χ² p ≈ 0.98) once the 85/15 design ratio is supplied.
 - **Both metrics lift significantly:** conversion 0.18% → 0.31%
   (+0.13pp, p ≈ 2 × 10⁻⁶); visit 3.69% → 4.86% (+1.17pp, p ≈ 4 × 10⁻²⁷).
-- **PSM barely moves the estimate** — ATT 0.0013 → 0.0010 (conversion) and
+- **PSM barely moves the estimate** - ATT 0.0013 → 0.0010 (conversion) and
   0.0117 → 0.0101 (visit) across 255,123 matched pairs. That small
   adjustment is the expected signature of a *truly randomised* experiment
   (little confounding to remove), and contrasts sharply with the synthetic
   `compromised_experiment.csv`, where PSM collapses the naive estimate.
   Rosenbaum Γ ≈ 1.5 indicates moderate robustness to hidden bias.
 
-Validating on Criteo also surfaced — and the test suite now guards
-against — three real-data bugs the synthetic demos could not: identical
+Validating on Criteo also surfaced - and the test suite now guards
+against - three real-data bugs the synthetic demos could not: identical
 rows wrongly dropped when covariates are low-cardinality, variant labels
 misread from the first few rows under a skewed split, and an
 index-alignment fault in the adapter's sampling path.
@@ -332,7 +332,7 @@ ab-guardrail <csv>
 
 ## Verdict logic
 
-The verdict is decided deterministically — the LLM does not vote.
+The verdict is decided deterministically - the LLM does not vote.
 
 1. SRM detected (χ² p < 0.001) → **COMPROMISED**. Nothing else matters.
 2. PSM produces a *sign flip* on the primary metric while the naive
@@ -363,7 +363,7 @@ The verdict is decided deterministically — the LLM does not vote.
   These require experiment design, not analysis.
 - The Criteo adapter is shipped and unit-tested against a synthetic
   Criteo-shaped CSV, but a full run needs the ~297 MB dataset downloaded
-  locally — it is not exercised in CI. The three bundled demo datasets are
+  locally - it is not exercised in CI. The three bundled demo datasets are
   synthetic, with a known ground truth, by design.
 
 ---
@@ -402,4 +402,4 @@ The verdict is decided deterministically — the LLM does not vote.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

@@ -114,16 +114,16 @@ def generate_compromised(n: int = 12_000, seed: int = 7) -> pd.DataFrame:
     """
     Two things are wrong with this experiment:
 
-    1. SRM — the assignment rate is ~61/39 instead of 50/50 (e.g. a broken
+    1. SRM - the assignment rate is ~61/39 instead of 50/50 (e.g. a broken
        feature flag dropped some control users).
-    2. Confounding — the assignment probability depends on
+    2. Confounding - the assignment probability depends on
        pre_signup_value AND device, so treatment systematically gets
        higher-value users. Naive comparisons will overstate the lift.
     """
     rng = np.random.default_rng(seed)
     users = _make_users(n, rng)
 
-    # Variant assignment is NOT random — it leaks from covariates.
+    # Variant assignment is NOT random - it leaks from covariates.
     propensity = (
         0.45
         + 0.0020 * users["pre_signup_value"].values
@@ -137,7 +137,7 @@ def generate_compromised(n: int = 12_000, seed: int = 7) -> pd.DataFrame:
     treated = rng.binomial(1, propensity)
     variant = np.where(treated == 1, "treatment", "control")
 
-    # The TRUE treatment effect here is essentially zero — any apparent lift
+    # The TRUE treatment effect here is essentially zero - any apparent lift
     # comes from the confounding above.
     p_base = (
         0.08
