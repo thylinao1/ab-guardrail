@@ -591,7 +591,7 @@ trim  = common-support region</pre>
         </div>
         <div id="cf-verdict-wrap" style="display:flex;align-items:center;gap:14px">
           <span class="verdict-chip ok" id="cf-verdict"><span class="led"></span><span id="cf-verdict-t">PSM agrees with naive</span></span>
-          <span class="mono" style="font-size:11.5px;color:var(--ink-3)" id="cf-verdict-note">no sign flip · effect is robust</span>
+          <span class="mono" style="font-size:11.5px;color:var(--ink-3)" id="cf-verdict-note">no sign flip · effect holds up</span>
         </div>
       </div>
     </div>
@@ -657,7 +657,7 @@ trim  = common-support region</pre>
       </div>
       <div class="diag">
         <div class="head"><div class="name">Validated on the Criteo dataset</div><div class="status pass">14M rows</div></div>
-        <div class="desc">A shipped adapter maps the real Criteo Uplift dataset (13.98M-row randomised ad experiment) onto the tool&rsquo;s schema. On a 300k-row sample the guardrail returns SAFE TO ROLL OUT - the correct call for a genuine RCT: SRM passes, both metrics lift significantly, and PSM barely moves the estimate, the expected signature of true randomisation. The exercise also caught three real-data bugs the synthetic demos could not.</div>
+        <div class="desc">A shipped adapter maps the real Criteo Uplift dataset (13.98M-row randomised ad experiment) onto the tool&rsquo;s schema. On a 300k-row sample the guardrail returns SAFE TO ROLL OUT - the correct call for a genuine RCT: SRM passes, both metrics show a significant lift, and PSM barely moves the estimate, the expected signature of true randomisation. The exercise also caught three real-data bugs the synthetic demos could not.</div>
         <div class="stat">
           <div class="row"><span class="k">Criteo sample</span><span>300,204 rows</span></div>
           <div class="row"><span class="k">SRM</span><span>&chi;&sup2; p &asymp; 0.98 &middot; passes</span></div>
@@ -955,7 +955,7 @@ function commas(n){ return Math.round(n).toLocaleString('en-US'); }
     } else {
       chip.className='verdict-chip ok';
       document.getElementById('cf-verdict-t').textContent='PSM agrees with naive';
-      document.getElementById('cf-verdict-note').textContent='no sign flip · effect is robust';
+      document.getElementById('cf-verdict-note').textContent='no sign flip · effect holds up';
     }
 
     /* horizontal bars: true / naive / ATT against a zero axis */
@@ -1009,7 +1009,7 @@ function commas(n){ return Math.round(n).toLocaleString('en-US'); }
     const worth=fwer>alpha*1.5;
     const chip=document.getElementById('mt-verdict');
     chip.className='verdict-chip '+(worth?'bad':'ok');
-    document.getElementById('mt-verdict-t').textContent=worth?'Correction essential':'Correction optional';
+    document.getElementById('mt-verdict-t').textContent=worth?'Correction needed':'Correction optional';
     document.getElementById('mt-verdict-note').textContent=worth
       ? 'raw error '+(fwer*100).toFixed(0)+'% - far above the '+(alpha*100).toFixed(0)+'% target'
       : 'few enough tests that raw error stays near target';

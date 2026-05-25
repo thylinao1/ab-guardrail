@@ -230,7 +230,7 @@ PSM-adjusted ATT in the same direction.
 
 **`compromised_experiment.csv`** - two simultaneous problems: a 61/39 split
 (SRM) and variant assignment correlated with `pre_signup_value` and
-`device` (confounding). Verdict **EXPERIMENT COMPROMISED**, primarily
+`device` (confounding). Verdict **EXPERIMENT COMPROMISED**, mainly
 citing the SRM (p ≈ 2 × 10⁻¹³²); PSM shows the naive revenue lift shrink
 under adjustment.
 
@@ -296,7 +296,7 @@ the guardrail returns **SAFE TO ROLL OUT**, which is the correct call for
 a genuine RCT:
 
 - **SRM passes** (χ² p ≈ 0.98) once the 85/15 design ratio is supplied.
-- **Both metrics lift significantly:** conversion 0.18% → 0.31%
+- **Both metrics show a significant lift:** conversion 0.18% → 0.31%
   (+0.13pp, p ≈ 2 × 10⁻⁶); visit 3.69% → 4.86% (+1.17pp, p ≈ 4 × 10⁻²⁷).
 - **PSM barely moves the estimate** - ATT 0.0013 → 0.0010 (conversion) and
   0.0117 → 0.0101 (visit) across 255,123 matched pairs. That small
@@ -339,7 +339,7 @@ The verdict is decided deterministically - the LLM does not vote.
    estimate was significant → **COMPROMISED** (confounding).
 3. Naive estimate is significant AND PSM ATT collapsed to less than 50%
    of naive AND PSM bootstrap 95% CI covers zero → **COMPROMISED** (effect
-   not robust).
+   does not hold up).
 4. Primary metric is significant at 5% (after multiple-testing
    correction) and no guardrail fired → **SAFE**.
 5. Otherwise → **NO SIGNIFICANT EFFECT**.
