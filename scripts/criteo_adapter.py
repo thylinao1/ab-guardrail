@@ -35,8 +35,8 @@ Mapping applied
 Why a separate adapter
 ----------------------
 ab-guardrail's loader cleans malformed rows, duplicates and dirty numerics,
-but it will not *reinterpret semantics* - it cannot know that Criteo's
-`treatment` is the variant or that `exposure` must be excluded. Semantic
+but it will not *reinterpret semantics*. It cannot know that Criteo's
+`treatment` is the variant, or that `exposure` must be excluded. Semantic
 mapping is a per-dataset job and belongs in an adapter, not in the tool.
 
 Get the data
@@ -87,7 +87,7 @@ def adapt_criteo(
     sample   : if set, take a stratified random sample of this many rows
                (stratified on the treatment column so the split is held).
                Pass None to keep every row.
-    chunksize: rows per read chunk - keeps memory flat on the 13.98M-row file.
+    chunksize: rows per read chunk; keeps memory flat on the 13.98M-row file.
     seed     : RNG seed for reproducible sampling.
 
     Returns a dict of summary stats.
@@ -207,11 +207,11 @@ def main() -> int:
     print()
     # Criteo is DESIGNED with an unequal (~85/15) split. The SRM check
     # compares observed vs *planned*, so the planned ratio must be passed
-    # explicitly - otherwise the default 50/50 assumption false-positives.
+    # explicitly, or the default 50/50 assumption false-positives.
     expected = json.dumps(
         {"control": split.get("control", 0.0), "treatment": split.get("treatment", 0.0)}
     )
-    print("Next - note Criteo's planned split is NOT 50/50, so pass it:")
+    print("Next (Criteo's planned split is NOT 50/50, so pass it):")
     print(f"  ab-guardrail {stats['out_path']} --mode pipeline \\")
     print("      --primary-metric conversion --secondary-metrics visit \\")
     print("      --covariates " + ",".join(RAW_FEATURES) + " \\")

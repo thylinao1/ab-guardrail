@@ -5,15 +5,14 @@ Three execution modes, set with --mode:
     pipeline  (default)  Deterministic routing. Column roles are inferred
                          by a hardcoded heuristic; SRM / metric tests / PSM
                          run as a plain Python pipeline. The LLM is invoked
-                         exactly ONCE, at the very end, to turn the
+                         exactly once, at the very end, to turn the
                          deterministic JSON into a plain-English summary.
-                         This is the production-sane path: no LLM latency
-                         or cost in the routing hot loop.
+                         No LLM latency or cost sits in the routing loop.
 
-    agent     (opt-in)   Claude orchestrates routing via a tool-use loop.
+    agent     (opt-in)   Claude drives routing through a tool-use loop.
                          Useful when column roles cannot be inferred
                          deterministically (unfamiliar schema). Slower and
-                         costlier - deliberately not the default.
+                         more expensive, so it is not the default.
 
     offline              Fully deterministic. No API calls at all. The
                          summary is rendered from a template. Used in CI
@@ -244,7 +243,7 @@ def _run(args: argparse.Namespace) -> int:
             plan = infer_schema_heuristic(profile)
     else:
         print(f"{_BOLD}{_CYAN}>> Routing (deterministic){_RESET}  "
-              f"hardcoded heuristic - no LLM")
+              f"hardcoded heuristic, no LLM")
         plan = infer_schema_heuristic(profile)
 
     plan = _apply_overrides(plan, args, profile)
@@ -315,7 +314,7 @@ def _run(args: argparse.Namespace) -> int:
               f"p={m.primary_p_value:.3g}{adj} [{sig}]")
     for psm in psm_results:
         gamma = psm.rosenbaum.gamma_critical if psm.rosenbaum else None
-        gstr = f" gamma_crit={gamma:.2f}" if gamma else " gamma_crit=robust"
+        gstr = f" gamma_crit={gamma:.2f}" if gamma else " gamma_crit=above grid"
         print(f"   PSM {psm.metric}: naive={psm.naive_effect:+.4f}  "
               f"ATT={psm.psm_att:+.4f} [{psm.psm_ci_low:+.4f},{psm.psm_ci_high:+.4f}]  "
               f"({psm.n_matched_pairs:,} pairs;{gstr})")

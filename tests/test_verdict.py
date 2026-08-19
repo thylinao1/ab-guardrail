@@ -56,7 +56,7 @@ def test_schema_heuristic_picks_pre_columns_as_covariates(
     assert plan.control_label == "control"
     assert plan.treatment_label == "treatment"
     assert "pre_signup_value" in plan.covariates
-    # `revenue` and `converted` are outcomes - must not appear in covariates.
+    # `revenue` and `converted` are outcomes; they must not appear in covariates.
     assert "revenue" not in plan.covariates
     assert "converted" not in plan.covariates
 

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Experimentation Guardrail Agent · Case Study · Maksim Silchenko</title>
-<meta name="description" content="An A/B test can be broken and still report a clean p-value. A command-line guardrail that reads what the p-value can't see - SRM, confounding, multiple testing - via a deterministic pipeline, with an LLM writing only the closing summary.">
+<meta name="description" content="A command-line guardrail for online experiments: it checks the traffic split for Sample Ratio Mismatch, runs shape-appropriate metric tests, corrects for multiple testing, and re-estimates the effect under propensity score matching. Deterministic pipeline, with an LLM writing only the closing summary.">
 <meta property="og:title" content="The Experimentation Guardrail Agent · Case Study">
-<meta property="og:description" content="When an A/B test lies, the model never tells you. The SRM does.">
+<meta property="og:description" content="SRM, multiple testing and confounding checks around an A/B-test CSV, ending in a launch verdict.">
 <style>
 :root{
   --bg:#f4efe6; --bg-2:#ede5d4; --bg-3:#e3d9c0; --bg-dark:#1e1c14;
@@ -258,33 +258,34 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ink)
     <span class="serif-italic" style="color:var(--accent)">clean p-value.</span>
   </h1>
   <p class="hero-sub">
-    Companies run thousands of A/B tests; a measurable fraction are quietly
-    invalid before anyone reads the result - a leaky feature flag, a
-    re-used randomisation seed, an unmeasured confounder. The metric&nbsp;test
-    still runs. The p-value still prints. <strong>ab-guardrail</strong> is a
-    command-line tool that reads the part the p-value can&rsquo;t see:
-    it checks the allocation for Sample Ratio Mismatch, runs the right metric
-    test for the data&rsquo;s shape, corrects for multiple testing, and
-    propensity-matches away confounding - then returns a verdict, not
-    a number. Routing and statistics are a <em>deterministic pipeline</em>;
-    an LLM is invoked once, at the end, to write the summary.
+    Companies run thousands of A/B tests, and a measurable fraction are
+    invalid before anyone reads the result: a leaky feature flag, a re-used
+    randomisation seed, an unmeasured confounder. The metric&nbsp;test still
+    runs and the p-value still prints. <strong>ab-guardrail</strong> is a
+    command-line tool that checks the things the metric test does not.
+    It tests the allocation for Sample Ratio Mismatch, runs the metric test
+    that suits the data's shape, corrects for multiple testing, and
+    propensity-matches away confounding, then reports a launch verdict
+    alongside the numbers. Routing and statistics are a
+    <em>deterministic pipeline</em>; an LLM is invoked once, at the end, to
+    write the summary.
   </p>
   <div class="hero-stats">
     <div class="hero-stat">
       <div class="v accent">10<sup style="font-size:0.44em;font-weight:600;top:-0.05em">&minus;132</sup></div>
-      <div class="l">SRM chi-square p-value flagged on the compromised demo - a 61/39 split that no metric test would catch.</div>
+      <div class="l">SRM chi-square p-value flagged on the compromised demo, a 61/39 split that no metric test would catch.</div>
     </div>
     <div class="hero-stat">
       <div class="v">1</div>
-      <div class="l">LLM call on the default path - the closing summary. Routing &amp; statistics are deterministic Python.</div>
+      <div class="l">LLM call on the default path: the closing summary. Routing and statistics are deterministic Python.</div>
     </div>
     <div class="hero-stat">
       <div class="v">36</div>
-      <div class="l">Pytest cases - including messy-data and Criteo-adapter suites - green in CI on Python 3.10-3.12.</div>
+      <div class="l">Pytest cases (including the messy-data and Criteo-adapter suites), green in CI on Python 3.10-3.12.</div>
     </div>
     <div class="hero-stat">
       <div class="v">7</div>
-      <div class="l">Peer-reviewed methods implemented - SRM, Newcombe, Welch, BH-FDR, PSM, Rosenbaum bounds, CUPED.</div>
+      <div class="l">Peer-reviewed methods implemented: SRM, Newcombe, Welch, BH-FDR, PSM, Rosenbaum bounds, CUPED.</div>
     </div>
   </div>
 </section>
@@ -296,12 +297,12 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ink)
     <div class="two-col">
       <div>
         <h2 class="display display-l" style="margin:0 0 18px">
-          What is the most under-checked failure mode in industry A/B testing - and why does the metric test never see it?
+          The failure modes that arrive before the metric is computed, and that the metric test cannot see.
         </h2>
         <div class="body-prose">
           <p>A standard A/B-test analysis answers one question: did the metric move? It runs a t-test, prints a p-value, and stops. But that pipeline is blind to a whole class of failures that happen <span class="em">before the metric is ever computed</span>.</p>
-          <p>The headline case is <span class="em">Sample Ratio Mismatch</span> (SRM). If a feature flag silently drops part of the control arm, the experiment ships at, say, 45/55 instead of 50/50. The t-test on the metric runs perfectly - and its answer is biased, because the two groups are no longer comparable. Microsoft&rsquo;s experimentation team found roughly 6% of their online tests carried an SRM, with systematically distorted effect estimates.</p>
-          <p>So the project refuses the brief as stated. Instead of <span class="em">&ldquo;is the metric significant?&rdquo;</span> it answers <span class="em">&ldquo;is this experiment safe to interpret at all?&rdquo;</span> - and returns one of three verdicts: <span class="mono">SAFE TO ROLL OUT</span>, <span class="mono">EXPERIMENT COMPROMISED</span>, or <span class="mono">NO SIGNIFICANT EFFECT</span>.</p>
+          <p>The main case is <span class="em">Sample Ratio Mismatch</span> (SRM). If a feature flag silently drops part of the control arm, the experiment ships at, say, 45/55 instead of 50/50. The t-test on the metric runs perfectly, and its answer is biased, because the two groups are no longer comparable. Microsoft's experimentation team found roughly 6% of their online tests carried an SRM, with systematically distorted effect estimates.</p>
+          <p>So the tool answers a different question. Instead of <span class="em">"is the metric significant?"</span> it answers <span class="em">"is this experiment safe to interpret at all?"</span>, returning one of three verdicts: <span class="mono">SAFE TO ROLL OUT</span>, <span class="mono">EXPERIMENT COMPROMISED</span>, or <span class="mono">NO SIGNIFICANT EFFECT</span>.</p>
         </div>
       </div>
       <div class="card" style="padding:0">
@@ -348,19 +349,20 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ink)
 <section id="architecture" class="section section-alt">
   <div class="wrap">
     <div class="kicker"><span class="dot"></span><span class="eyebrow">02 · Architecture</span></div>
-    <h2 class="display display-l" style="margin:0 0 12px;max-width:26ch">Four stages. The LLM picks the plan; deterministic code runs the statistics.</h2>
+    <h2 class="display display-l" style="margin:0 0 12px;max-width:26ch">Four stages. Deterministic code runs the statistics; the LLM writes the summary.</h2>
     <p class="body-prose" style="max-width:66ch;margin-bottom:38px">
-      The design rule is a hard line: the LLM never computes a number. It reads
-      column names and a few sample rows, decides which column is the variant
-      and which are covariates, and calls tools. Every p-value, CI and effect
-      size is produced by <span class="mono">scipy.stats</span> and
-      <span class="mono">scikit-learn</span>. Letting an LLM weigh evidence or
-      pick a threshold is the fast track to hallucinated significance.
+      The design rule is a hard line: the LLM never computes a number. On the
+      default path it never sees the data either. A name-based heuristic decides
+      which column is the variant and which are covariates, and every p-value,
+      CI and effect size is produced by <span class="mono">scipy.stats</span> and
+      <span class="mono">scikit-learn</span>. An LLM asked to weigh evidence or
+      pick a threshold will sooner or later report a significance that is not
+      there.
     </p>
     <div class="pipeline">
-      <div class="pipe-row"><div class="stage"><span class="num">01</span><span class="name">load</span></div><div><div class="ttl">Defensive ingestion &amp; data-quality report</div><div class="desc"><span class="mono">data_loader.py</span> ingests the CSV the way a real e-commerce export demands: malformed rows skipped, double-logged duplicates and all-null columns dropped, dirty numeric tokens coerced. Every repair is counted into a <span class="mono">DataQualityReport</span> - nothing is fixed silently - and the cleaned frame is profiled into a typed <span class="mono">DatasetProfile</span>.</div><div class="meta">DataQualityReport · DatasetProfile · raises DataValidationError</div></div></div>
-      <div class="pipe-row"><div class="stage"><span class="num">02</span><span class="name">route</span></div><div><div class="ttl">Deterministic routing - no LLM in the hot path</div><div class="desc">A hardcoded heuristic identifies the variant column, the metrics and the pre-treatment covariates. Paying LLM latency to dispatch data to three deterministic functions is poor production engineering, so the default path does not. An opt-in <span class="mono">--mode agent</span> uses a Claude tool-use loop instead, for unfamiliar schemas where the heuristic cannot infer roles.</div><div class="meta">agent.py · infer_schema_heuristic() · --mode agent for tool-use</div></div></div>
-      <div class="pipe-row"><div class="stage"><span class="num">03</span><span class="name">guardrails</span></div><div><div class="ttl">Three statistical engines, fully deterministic</div><div class="desc"><span class="mono">srm.py</span> - chi-square goodness-of-fit. <span class="mono">metric_tests.py</span> - Welch + Mann-Whitney or chi-square + Newcombe CI, plus BH-FDR correction and CUPED. <span class="mono">causal.py</span> - PSM with common-support trimming, bootstrap SE and Rosenbaum bounds.</div><div class="meta">pure functions · typed dataclass results · 36 pytest cases</div></div></div>
+      <div class="pipe-row"><div class="stage"><span class="num">01</span><span class="name">load</span></div><div><div class="ttl">Defensive ingestion &amp; data-quality report</div><div class="desc"><span class="mono">data_loader.py</span> ingests the CSV the way a real e-commerce export demands: malformed rows skipped, double-logged duplicates and all-null columns dropped, dirty numeric tokens coerced. Every repair is counted into a <span class="mono">DataQualityReport</span> (nothing is fixed silently), and the cleaned frame is profiled into a typed <span class="mono">DatasetProfile</span>.</div><div class="meta">DataQualityReport · DatasetProfile · raises DataValidationError</div></div></div>
+      <div class="pipe-row"><div class="stage"><span class="num">02</span><span class="name">route</span></div><div><div class="ttl">Deterministic routing, no LLM in the hot path</div><div class="desc">A hardcoded heuristic identifies the variant column, the metrics and the pre-treatment covariates. Dispatching data to three deterministic functions does not need a model in the loop, so the default path does not put one there. An opt-in <span class="mono">--mode agent</span> uses a Claude tool-use loop instead, for unfamiliar schemas where the heuristic cannot infer roles.</div><div class="meta">agent.py · infer_schema_heuristic() · --mode agent for tool-use</div></div></div>
+      <div class="pipe-row"><div class="stage"><span class="num">03</span><span class="name">guardrails</span></div><div><div class="ttl">Three statistical engines, fully deterministic</div><div class="desc"><span class="mono">srm.py</span>: chi-square goodness-of-fit. <span class="mono">metric_tests.py</span>: Welch + Mann-Whitney or chi-square + Newcombe CI, plus BH-FDR correction and CUPED. <span class="mono">causal.py</span>: PSM with common-support trimming, bootstrap SE and Rosenbaum bounds.</div><div class="meta">pure functions · typed dataclass results · 36 pytest cases</div></div></div>
       <div class="pipe-row"><div class="stage"><span class="num">04</span><span class="name">report</span></div><div><div class="ttl">Verdict logic &amp; Markdown render</div><div class="desc"><span class="mono">report.py</span> applies a deterministic verdict rule (the LLM does not vote), renders a Markdown report with a love-plot of pre/post covariate balance, and Claude writes a plain-English summary constrained strictly to the computed numbers.</div><div class="meta">SAFE TO ROLL OUT · EXPERIMENT COMPROMISED · NO SIGNIFICANT EFFECT</div></div></div>
     </div>
   </div>
@@ -370,33 +372,33 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ink)
 <section id="twist" class="section">
   <div class="wrap">
     <div class="kicker"><span class="dot"></span><span class="eyebrow">03 · The twist</span></div>
-    <h2 class="display display-l" style="margin:0 0 18px;max-width:24ch">Two datasets, same schema. One ships. One is quietly broken.</h2>
+    <h2 class="display display-l" style="margin:0 0 18px;max-width:24ch">Two datasets with the same schema, one sound and one broken.</h2>
     <p class="body-prose" style="max-width:66ch;margin-bottom:30px">
       The repo ships two synthetic 12,000-user experiments with an identical
       schema. <span class="mono">clean_experiment.csv</span> is a properly
       randomised test with a real lift. <span class="mono">compromised_experiment.csv</span>
       carries two simultaneous defects: a 61/39 allocation (SRM) and treatment
       that systematically captures higher-value users (confounding). A naive
-      t-test would happily report a &ldquo;significant&rdquo; revenue lift on the
-      broken one. The agent does not.
+      t-test reports a "significant" revenue lift on the broken one. The
+      guardrail catches it at the allocation check, before the metric is read.
     </p>
     <div class="twist-grid">
       <div class="twist-col">
         <div class="label"><span class="pill">clean</span> properly randomised test</div>
         <div class="num-big good">SAFE</div>
         <div class="num-cap">SRM p = 0.94 · conversion +3.35pp (p &asymp; 7&times;10<sup>&minus;8</sup>) · PSM ATT +2.25pp, same sign</div>
-        <div class="note">Allocation is 50.0/50.0. The lift survives propensity matching and Rosenbaum sensitivity. The verdict logic clears it to roll out - no guardrail fired.</div>
+        <div class="note">Allocation is 50.0/50.0. The lift survives propensity matching and Rosenbaum sensitivity. No guardrail fired, so the verdict logic clears it to roll out.</div>
       </div>
       <div class="twist-col">
         <div class="label right"><span class="pill">compromised</span> SRM + confounding</div>
         <div class="num-big bad">COMPROMISED</div>
         <div class="num-cap">SRM p &asymp; 2&times;10<sup>&minus;132</sup> · 61/39 split · naive revenue +$0.57 collapses to +$0.42 ATT</div>
-        <div class="note">The SRM check fires at a p-value with 132 leading zeros. Under the verdict rule, SRM detected ends the analysis: the experiment is uninterpretable until the randomiser is fixed, whatever the metric says.</div>
+        <div class="note">The SRM check fires at a p-value of order 1e-132. Under the verdict rule, a detected SRM ends the analysis: the experiment is uninterpretable until the randomiser is fixed, whatever the metric says.</div>
       </div>
     </div>
     <div class="verdict" style="margin-top:44px">
-      The model was never the problem. The randomiser was - and a metric test, run on a 61/39 split, will still hand you a number that looks like a decision.
-      <div class="mono" style="font-size:11px;color:var(--ink-3);font-style:normal;letter-spacing:.04em;margin-top:14px">M. Silchenko · case-study verdict</div>
+      A metric test run on a 61/39 split still returns a number, and it looks exactly like a number you could act on. The allocation check is what tells the two datasets apart.
+      <div class="mono" style="font-size:11px;color:var(--ink-3);font-style:normal;letter-spacing:.04em;margin-top:14px">M. Silchenko</div>
     </div>
   </div>
 </section>
@@ -405,7 +407,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ink)
 <section id="guardrails" class="section section-alt">
   <div class="wrap">
     <div class="kicker"><span class="dot"></span><span class="eyebrow">04 · The three engines</span></div>
-    <h2 class="display display-l" style="margin:0 0 14px;max-width:26ch">Three statistical engines, each chosen to be defensible in a stats interview.</h2>
+    <h2 class="display display-l" style="margin:0 0 14px;max-width:26ch">Three statistical engines, each chosen over a weaker default.</h2>
     <p class="body-prose" style="max-width:64ch;margin-bottom:36px">
       Every method here was picked because the obvious alternative has a known
       weakness. A Wald interval under-covers near 0 and 1; a paired-t SE is
@@ -471,7 +473,7 @@ trim  = common-support region</pre>
       replacement because re-used control units induce dependence (Abadie &amp;
       Imbens, 2006). The repo bootstraps instead, and the report prints both so
       the bias is visible. The four interactive panels below let you drive each
-      engine&rsquo;s core mathematics directly.
+      engine's core mathematics directly.
     </p>
   </div>
 </section>
@@ -479,12 +481,12 @@ trim  = common-support region</pre>
 <!-- ============ INTERACTIVE 1 · SRM DETECTOR ============ -->
 <section id="srm-lab" class="section">
   <div class="wrap">
-    <div class="kicker"><span class="dot"></span><span class="eyebrow tag-interactive">&#9733; interactive 1 · srm detector</span></div>
-    <h2 class="display display-l" style="margin:0 0 14px;max-width:26ch">A 1% imbalance is invisible. At scale, it is a chi-square catastrophe.</h2>
+    <div class="kicker"><span class="dot"></span><span class="eyebrow tag-interactive">interactive 1 · srm detector</span></div>
+    <h2 class="display display-l" style="margin:0 0 14px;max-width:26ch">A 1% imbalance looks like nothing until the sample gets large.</h2>
     <p class="body-prose" style="max-width:64ch;margin-bottom:32px">
       SRM is counter-intuitive because a tiny ratio error becomes overwhelming
-      evidence once the sample is large. Move the two sliders - total users
-      and the observed share landing in control - and watch the chi-square
+      evidence once the sample is large. Move the two sliders (total users, and
+      the observed share landing in control) and watch the chi-square
       goodness-of-fit p-value. The threshold for declaring an SRM is
       <span class="mono">p &lt; 0.001</span>.
     </p>
@@ -522,7 +524,7 @@ trim  = common-support region</pre>
     <p class="chart-cap" style="margin-top:18px">
       <span class="lbl">test</span> chi-square goodness-of-fit vs. a planned 50/50 split, df = 1 ·
       <span class="lbl">threshold</span> SRM declared at p &lt; 0.001 ·
-      <span class="lbl">try</span> hold the split at 49/51 and push N upward - a half-percent error becomes decisive past ~150k users
+      <span class="lbl">try</span> hold the split at 49/51 and push N upward: a half-percent error becomes decisive past ~150k users
     </p>
   </div>
 </section>
@@ -535,9 +537,9 @@ trim  = common-support region</pre>
       <div>
         <h2 class="display display-l" style="margin:0 0 16px;max-width:24ch">The LLM writes the summary. It does not run the pipeline.</h2>
         <div class="body-prose">
-          <p>A tool-use loop could put the LLM in charge of routing - letting the model decide which check to run on which column. It works, but it is the wrong call for production: paying LLM latency and cost to dispatch data to three deterministic functions is not how a production data tool should be built.</p>
-          <p>So the default <span class="mono">pipeline</span> mode routes deterministically - a hardcoded heuristic - and invokes the LLM <strong>exactly once</strong>, at the very end, to turn the finished results JSON into a plain-English summary. That is the one place a language model genuinely adds value. The verdict itself is decided by deterministic code; the summary may not contradict it or introduce a number that is not in the JSON.</p>
-          <p>The tool-use agent still ships, as opt-in <span class="mono">--mode agent</span>, for datasets whose column roles a heuristic cannot infer. Knowing when <em>not</em> to spend the LLM is part of the design.</p>
+          <p>A tool-use loop can put the LLM in charge of routing, letting the model decide which check to run on which column. It works. It also spends latency and money to dispatch data to three deterministic functions, which is hard to justify once the schema is familiar.</p>
+          <p>So the default <span class="mono">pipeline</span> mode routes with a hardcoded heuristic and invokes the LLM <strong>exactly once</strong>, at the very end, to turn the finished results JSON into a plain-English summary. The verdict itself is decided by deterministic code, and the summary may not contradict it or introduce a number that is absent from the JSON.</p>
+          <p>The tool-use agent still ships, as opt-in <span class="mono">--mode agent</span>, for datasets whose column roles a heuristic cannot infer.</p>
         </div>
       </div>
       <div class="loop">
@@ -545,7 +547,7 @@ trim  = common-support region</pre>
         <div class="loop-step"><div class="turn">2</div><div><div class="who">route · deterministic</div><div class="what">A hardcoded heuristic picks the variant column, metrics, and covariates. <b>No LLM call.</b></div><div class="tool">infer_schema_heuristic(profile)</div></div></div>
         <div class="loop-step"><div class="turn">3</div><div><div class="who">guardrails · deterministic</div><div class="what">SRM, metric tests, BH-FDR, and PSM run as a plain Python pipeline. Every number from scipy / scikit-learn.</div></div></div>
         <div class="loop-step"><div class="turn">4</div><div><div class="who">verdict · deterministic</div><div class="what">A priority-ordered rule set in <span class="mono">report.py</span> decides SAFE / COMPROMISED / NO EFFECT. <b>The model does not vote.</b></div></div></div>
-        <div class="loop-step"><div class="turn">5</div><div><div class="who">summary &middot; the one LLM call</div><div class="what">Claude receives the finished JSON and writes a 4-6 sentence executive summary - bounded strictly to the computed numbers.</div><div class="tool">narrate(results_payload)</div></div></div>
+        <div class="loop-step"><div class="turn">5</div><div><div class="who">summary &middot; the one LLM call</div><div class="what">Claude receives the finished JSON and writes a 4-6 sentence executive summary, bounded strictly to the computed numbers.</div><div class="tool">narrate(results_payload)</div></div></div>
       </div>
     </div>
   </div>
@@ -554,8 +556,8 @@ trim  = common-support region</pre>
 <!-- ============ INTERACTIVE 2 · CONFOUNDING STUDIO ============ -->
 <section id="confounding" class="section">
   <div class="wrap">
-    <div class="kicker"><span class="dot"></span><span class="eyebrow tag-interactive">&#9733; interactive 2 · confounding studio</span></div>
-    <h2 class="display display-l" style="margin:0 0 14px;max-width:27ch">When assignment leaks from a covariate, the naive estimate lies. PSM reads through it.</h2>
+    <div class="kicker"><span class="dot"></span><span class="eyebrow tag-interactive">interactive 2 · confounding studio</span></div>
+    <h2 class="display display-l" style="margin:0 0 14px;max-width:27ch">When assignment leaks from a covariate, the naive estimate absorbs the bias. PSM removes most of it.</h2>
     <p class="body-prose" style="max-width:64ch;margin-bottom:32px">
       Set a <em>true</em> treatment effect, then dial up how strongly the variant
       assignment is confounded with a pre-treatment covariate (higher-value users
@@ -599,7 +601,7 @@ trim  = common-support region</pre>
       <span class="lbl">model</span> Y = 4&middot;X + &beta;&#7666;&middot;T + noise, with P(treated) rising in X ·
       <span class="lbl">naive</span> E[Y|T=1] &minus; E[Y|T=0] ·
       <span class="lbl">PSM ATT</span> recovered after matching on X ·
-      <span class="lbl">try</span> set the true effect to 0 with heavy confounding - the naive estimate invents a winner
+      <span class="lbl">try</span> set the true effect to 0 with heavy confounding: the naive estimate reports a winner that is not there
     </p>
   </div>
 </section>
@@ -607,8 +609,8 @@ trim  = common-support region</pre>
 <!-- ============ 06 DIAGNOSTICS ============ -->
 <section id="diagnostics" class="section section-alt">
   <div class="wrap">
-    <div class="kicker"><span class="dot"></span><span class="eyebrow">06 · Diagnostics &amp; robustness</span></div>
-    <h2 class="display display-l" style="margin:0 0 14px;max-width:26ch">Every choice that could leak signal is tested out loud.</h2>
+    <div class="kicker"><span class="dot"></span><span class="eyebrow">06 · Diagnostics &amp; sensitivity</span></div>
+    <h2 class="display display-l" style="margin:0 0 14px;max-width:26ch">The choices that could leak signal are checked and reported.</h2>
     <p class="body-prose" style="max-width:64ch;margin-bottom:36px">
       The PSM module does not stop at a point estimate. It trims to the
       common-support region, bootstraps the standard error, and reports how
@@ -617,7 +619,7 @@ trim  = common-support region</pre>
     <div class="diag-grid">
       <div class="diag">
         <div class="head"><div class="name">Common-support trimming</div><div class="status pass">enforced</div></div>
-        <div class="desc">Treated units with a propensity above the control maximum - and vice versa - are dropped before matching. Outside the overlap region, no causal claim is defensible, so the agent refuses to make one.</div>
+        <div class="desc">Treated units with a propensity above the control maximum (and controls below the treated minimum) are dropped before matching. Outside the overlap region no causal claim is defensible, so the tool refuses to make one.</div>
         <div class="stat">
           <div class="row"><span class="k">trimmed units</span><span>reported per arm</span></div>
           <div class="row"><span class="k">no overlap</span><span>raises StatisticalCheckError</span></div>
@@ -625,7 +627,7 @@ trim  = common-support region</pre>
       </div>
       <div class="diag">
         <div class="head"><div class="name">Bootstrap standard error</div><div class="status note">corrected</div></div>
-        <div class="desc">The naive paired-t SE is biased under matching with replacement - re-used controls induce dependence (Abadie &amp; Imbens, 2006). The module bootstraps the treated units, re-matches, and reports both SEs so the bias is visible.</div>
+        <div class="desc">The naive paired-t SE is biased under matching with replacement, because re-used controls induce dependence (Abadie &amp; Imbens, 2006). The module bootstraps the treated units, re-matches, and reports both SEs so the bias is visible.</div>
         <div class="stat">
           <div class="row"><span class="k">resamples</span><span>500 · re-match each</span></div>
           <div class="row"><span class="k">CI</span><span>2.5 / 97.5 percentile</span></div>
@@ -633,7 +635,7 @@ trim  = common-support region</pre>
       </div>
       <div class="diag">
         <div class="head"><div class="name">Rosenbaum bounds</div><div class="status note">sensitivity</div></div>
-        <div class="desc">A Wilcoxon signed-rank sensitivity analysis: at each hidden-bias level &Gamma;, the worst-case two-sided p-value. The critical &Gamma; is the strength of unmeasured confounding needed to overturn the ATT&rsquo;s significance.</div>
+        <div class="desc">A Wilcoxon signed-rank sensitivity analysis: at each hidden-bias level &Gamma;, the worst-case two-sided p-value. The critical &Gamma; is the strength of unmeasured confounding needed to overturn the ATT's significance.</div>
         <div class="stat">
           <div class="row"><span class="k">grid</span><span>&Gamma; = 1.0 &hellip; 3.0</span></div>
           <div class="row"><span class="k">reports</span><span>critical &Gamma;</span></div>
@@ -641,7 +643,7 @@ trim  = common-support region</pre>
       </div>
       <div class="diag">
         <div class="head"><div class="name">LLM kept out of the math</div><div class="status pass">by design</div></div>
-        <div class="desc">Routing and statistics are deterministic Python. The LLM never computes a p-value, weighs evidence, or picks the verdict - that is a deterministic rule in <span class="mono">report.py</span>. Its one job is a closing summary bounded to the computed numbers.</div>
+        <div class="desc">Routing and statistics are deterministic Python. The LLM never computes a p-value, weighs evidence, or picks the verdict; that last one is a rule set in <span class="mono">report.py</span>. Its one job is a closing summary bounded to the computed numbers.</div>
         <div class="stat">
           <div class="row"><span class="k">verdict</span><span>deterministic · code</span></div>
           <div class="row"><span class="k">numbers in summary</span><span>must exist in payload</span></div>
@@ -649,7 +651,7 @@ trim  = common-support region</pre>
       </div>
       <div class="diag">
         <div class="head"><div class="name">Defensive data loading</div><div class="status pass">production-shaped</div></div>
-        <div class="desc">Real e-commerce exports carry malformed rows, double-logged duplicates, all-null columns and dirty numeric tokens. The loader repairs each defect, counts it, and surfaces a data-quality report - nothing is fixed silently.</div>
+        <div class="desc">Real e-commerce exports carry malformed rows, double-logged duplicates, all-null columns and dirty numeric tokens. The loader repairs each defect, counts it, and prints a data-quality report, so nothing is fixed silently.</div>
         <div class="stat">
           <div class="row"><span class="k">malformed / duplicate rows</span><span>skipped &middot; dropped &middot; counted</span></div>
           <div class="row"><span class="k">dirty numerics</span><span>coerced &rarr; missing</span></div>
@@ -657,7 +659,7 @@ trim  = common-support region</pre>
       </div>
       <div class="diag">
         <div class="head"><div class="name">Validated on the Criteo dataset</div><div class="status pass">14M rows</div></div>
-        <div class="desc">A shipped adapter maps the real Criteo Uplift dataset (13.98M-row randomised ad experiment) onto the tool&rsquo;s schema. On a 300k-row sample the guardrail returns SAFE TO ROLL OUT - the correct call for a genuine RCT: SRM passes, both metrics show a significant lift, and PSM barely moves the estimate, the expected signature of true randomisation. The exercise also caught three real-data bugs the synthetic demos could not.</div>
+        <div class="desc">A shipped adapter maps the real Criteo Uplift dataset (a 13.98M-row randomised ad experiment) onto the tool's schema. On a 300k-row sample the guardrail returns SAFE TO ROLL OUT, which is the correct call for a genuine RCT: SRM passes, both metrics show a significant lift, and PSM barely moves the estimate, the expected signature of true randomisation. The exercise also caught three real-data bugs the synthetic demos could not.</div>
         <div class="stat">
           <div class="row"><span class="k">Criteo sample</span><span>300,204 rows</span></div>
           <div class="row"><span class="k">SRM</span><span>&chi;&sup2; p &asymp; 0.98 &middot; passes</span></div>
@@ -672,13 +674,13 @@ trim  = common-support region</pre>
 <!-- ============ INTERACTIVE 3 · MULTIPLICITY ============ -->
 <section id="multiplicity" class="section">
   <div class="wrap">
-    <div class="kicker"><span class="dot"></span><span class="eyebrow tag-interactive">&#9733; interactive 3 · multiple-testing lab</span></div>
-    <h2 class="display display-l" style="margin:0 0 14px;max-width:27ch">Check enough metrics and a false winner is almost guaranteed.</h2>
+    <div class="kicker"><span class="dot"></span><span class="eyebrow tag-interactive">interactive 3 · multiple-testing lab</span></div>
+    <h2 class="display display-l" style="margin:0 0 14px;max-width:27ch">Check enough metrics and one of them fires by chance.</h2>
     <p class="body-prose" style="max-width:64ch;margin-bottom:32px">
       Each individual test at &alpha; = 0.05 is fine. Run a family of them and
       the probability that <em>at least one</em> fires by pure chance climbs
-      fast. Drag the number of metrics and the per-test &alpha; - the curve
-      is the chance of a bogus &ldquo;significant&rdquo; result under the null.
+      fast. Drag the number of metrics and the per-test &alpha;; the curve
+      is the chance of a spurious "significant" result under the null.
       Benjamini-Hochberg and Bonferroni hold the family in check.
     </p>
     <div class="studio">
@@ -723,8 +725,8 @@ trim  = common-support region</pre>
 <!-- ============ INTERACTIVE 4 · CUPED ============ -->
 <section id="cuped" class="section section-alt">
   <div class="wrap">
-    <div class="kicker"><span class="dot"></span><span class="eyebrow tag-interactive">&#9733; interactive 4 · cuped variance reduction</span></div>
-    <h2 class="display display-l" style="margin:0 0 14px;max-width:27ch">A pre-experiment covariate shrinks the confidence interval - for free, no bias.</h2>
+    <div class="kicker"><span class="dot"></span><span class="eyebrow tag-interactive">interactive 4 · cuped variance reduction</span></div>
+    <h2 class="display display-l" style="margin:0 0 14px;max-width:27ch">A pre-experiment covariate shrinks the confidence interval without biasing the estimate.</h2>
     <p class="body-prose" style="max-width:64ch;margin-bottom:32px">
       CUPED (Deng et al., WSDM 2013) subtracts the part of the outcome that a
       pre-experiment covariate already explained. The point estimate is
@@ -772,10 +774,10 @@ trim  = common-support region</pre>
     <div class="kicker"><span class="dot"></span><span class="eyebrow">07 · The verdict</span></div>
     <div class="two-col" style="align-items:start">
       <div>
-        <h2 class="display display-l" style="margin:0 0 18px;max-width:22ch">One rule set. Applied in order. The model does not vote.</h2>
+        <h2 class="display display-l" style="margin:0 0 18px;max-width:22ch">One rule set, applied in order. The model does not vote.</h2>
         <div class="body-prose">
           <p>The verdict is a deterministic function in <span class="mono">report.py</span>. The LLM writes the summary; it never decides the outcome. The rules are applied in priority order, and the first one that matches wins.</p>
-          <p><span class="em" style="color:var(--accent)">SRM dominates everything.</span> If the allocation fails the chi-square check, the experiment is compromised - no metric result can rescue it, because the groups are not comparable.</p>
+          <p><span class="em" style="color:var(--accent)">SRM dominates everything.</span> If the allocation fails the chi-square check, the experiment is compromised, and no metric result can rescue it, because the groups are not comparable.</p>
           <p>Below SRM sit the causal rules: a sign flip between the naive estimate and the PSM ATT, or a significant naive effect that collapses below half its size once matched and whose bootstrap CI now covers zero. Either pattern means confounding, and the verdict turns.</p>
           <p class="mono" style="font-size:12.5px;color:rgba(244,239,230,.65)">Only if no guardrail fires does a significant primary metric earn a SAFE TO ROLL OUT.</p>
         </div>
@@ -800,12 +802,12 @@ trim  = common-support region</pre>
   <div class="wrap">
     <div class="kicker"><span class="dot"></span><span class="eyebrow">08 · What this project demonstrates</span></div>
     <div class="skills" style="margin-top:24px">
-      <div class="skill"><div class="n">01</div><div class="t">Decision-aware experimentation</div><div class="d">Reframing &ldquo;is the metric significant?&rdquo; as &ldquo;is this experiment safe to interpret?&rdquo; - SRM-first, with a three-state verdict instead of a bare p-value.</div></div>
+      <div class="skill"><div class="n">01</div><div class="t">Decision-aware experimentation</div><div class="d">Reframing "is the metric significant?" as "is this experiment safe to interpret?", running the SRM check first and reporting a three-state verdict alongside the p-value.</div></div>
       <div class="skill"><div class="n">02</div><div class="t">Causal inference</div><div class="d">Propensity score matching with caliper, common-support trimming, bootstrap standard errors, and Rosenbaum sensitivity bounds for hidden bias.</div></div>
       <div class="skill"><div class="n">03</div><div class="t">Statistical rigour</div><div class="d">Newcombe hybrid-score intervals over Wald, Welch over Student, Mann-Whitney as a non-parametric check, BH-FDR for multiplicity, CUPED for variance reduction.</div></div>
-      <div class="skill"><div class="n">04</div><div class="t">Pragmatic LLM engineering</div><div class="d">The LLM is scoped to one job - the closing summary - because routing data to deterministic functions does not need a model. A tool-use agent ships opt-in for unfamiliar schemas: knowing when not to spend the LLM is the point.</div></div>
+      <div class="skill"><div class="n">04</div><div class="t">Pragmatic LLM engineering</div><div class="d">The LLM is scoped to one job, the closing summary, because routing data to deterministic functions does not need a model. A tool-use agent ships opt-in for unfamiliar schemas.</div></div>
       <div class="skill"><div class="n">05</div><div class="t">Production-shaped Python</div><div class="d">Typed dataclasses, a custom exception hierarchy, pure guardrail functions, a 36-test pytest suite, ruff lint, and an installable package with a console entry point.</div></div>
-      <div class="skill"><div class="n">06</div><div class="t">Reproducibility</div><div class="d">A deterministic no-LLM mode for byte-stable CI, GitHub Actions across Python 3.10-3.12, pinned dependencies, and a synthetic data generator shipped with the repo.</div></div>
+      <div class="skill"><div class="n">06</div><div class="t">Reproducibility</div><div class="d">A deterministic no-LLM mode for byte-stable CI, GitHub Actions across Python 3.10-3.12, version-bounded dependencies, and a synthetic data generator shipped with the repo.</div></div>
     </div>
   </div>
 </section>
@@ -814,12 +816,12 @@ trim  = common-support region</pre>
 <section class="section section-tight section-alt">
   <div class="wrap">
     <div class="kicker"><span class="dot"></span><span class="eyebrow">09 · Honest limits</span></div>
-    <h2 class="display display-m" style="margin:0 0 26px;max-width:34ch">Four caveats that travel with the tool.</h2>
+    <h2 class="display display-m" style="margin:0 0 26px;max-width:34ch">Four caveats that travel with the tool</h2>
     <div class="limits-grid">
-      <div><div class="mono" style="font-size:11px;color:var(--ink-4);letter-spacing:.12em;margin-bottom:6px">01</div><div class="display display-m" style="font-size:21px;line-height:1.2;margin-bottom:8px">Synthetic demo data</div><div class="body-prose" style="font-size:14.5px"><p>The two shipped datasets are generated, with a known ground truth, to make the SRM and confounding behaviour visible and testable. On real data the agent is only as good as the covariates it is given.</p></div></div>
-      <div><div class="mono" style="font-size:11px;color:var(--ink-4);letter-spacing:.12em;margin-bottom:6px">02</div><div class="display display-m" style="font-size:21px;line-height:1.2;margin-bottom:8px">PSM is not randomisation</div><div class="body-prose" style="font-size:14.5px"><p>Propensity matching only adjusts for <em>observed</em> covariates. It is reported as a robustness check with Rosenbaum bounds attached - not as a substitute for a correctly randomised experiment.</p></div></div>
-      <div><div class="mono" style="font-size:11px;color:var(--ink-4);letter-spacing:.12em;margin-bottom:6px">03</div><div class="display display-m" style="font-size:21px;line-height:1.2;margin-bottom:8px">Out of scope by construction</div><div class="body-prose" style="font-size:14.5px"><p>The agent does not detect novelty effects, peeking, or network/SUTVA violations between arms. Those are problems of experiment <em>design</em>, not post-hoc analysis.</p></div></div>
-      <div><div class="mono" style="font-size:11px;color:var(--ink-4);letter-spacing:.12em;margin-bottom:6px">04</div><div class="display display-m" style="font-size:21px;line-height:1.2;margin-bottom:8px">Bootstrap, not Abadie-Imbens</div><div class="body-prose" style="font-size:14.5px"><p>The matched-pair SE is a treated-unit bootstrap, the common recipe - not the analytical Abadie-Imbens estimator. For a published causal estimate, the analytical form would be the next step.</p></div></div>
+      <div><div class="mono" style="font-size:11px;color:var(--ink-4);letter-spacing:.12em;margin-bottom:6px">01</div><div class="display display-m" style="font-size:21px;line-height:1.2;margin-bottom:8px">Synthetic demo data</div><div class="body-prose" style="font-size:14.5px"><p>The two shipped datasets are generated, with a known ground truth, to make the SRM and confounding behaviour visible and testable. On real data the tool is only as good as the covariates it is given.</p></div></div>
+      <div><div class="mono" style="font-size:11px;color:var(--ink-4);letter-spacing:.12em;margin-bottom:6px">02</div><div class="display display-m" style="font-size:21px;line-height:1.2;margin-bottom:8px">PSM is not randomisation</div><div class="body-prose" style="font-size:14.5px"><p>Propensity matching only adjusts for <em>observed</em> covariates. It is reported as a sensitivity check with Rosenbaum bounds attached, and it does not substitute for a correctly randomised experiment.</p></div></div>
+      <div><div class="mono" style="font-size:11px;color:var(--ink-4);letter-spacing:.12em;margin-bottom:6px">03</div><div class="display display-m" style="font-size:21px;line-height:1.2;margin-bottom:8px">Out of scope by construction</div><div class="body-prose" style="font-size:14.5px"><p>The tool does not detect novelty effects, peeking, or network/SUTVA violations between arms. Those are problems of experiment <em>design</em>, and post-hoc analysis cannot recover them.</p></div></div>
+      <div><div class="mono" style="font-size:11px;color:var(--ink-4);letter-spacing:.12em;margin-bottom:6px">04</div><div class="display display-m" style="font-size:21px;line-height:1.2;margin-bottom:8px">Bootstrap, not Abadie-Imbens</div><div class="body-prose" style="font-size:14.5px"><p>The matched-pair SE is a treated-unit bootstrap, which is the common recipe. It differs from the analytical Abadie-Imbens estimator. For a published causal estimate, the analytical form would be the next step.</p></div></div>
     </div>
   </div>
 </section>
@@ -827,13 +829,13 @@ trim  = common-support region</pre>
 <!-- ============ CTA ============ -->
 <section class="cta">
   <div class="eyebrow" style="margin-bottom:18px">End of case study</div>
-  <h2 class="display display-xl" style="margin:0 auto 18px;max-width:24ch">Read the source, the tests, and the two demo reports.</h2>
+  <h2 class="display display-xl" style="margin:0 auto 18px;max-width:24ch">Read the source, the tests, and the demo reports.</h2>
   <p class="body-prose" style="max-width:58ch;margin:0 auto 32px;color:var(--ink-3)">The repository contains the three guardrail engines, the deterministic routing pipeline, the opt-in tool-use agent, the verdict logic, a 36-test pytest suite running in CI on Python 3.10-3.12, the defensive CSV loader, the three demo datasets, and the Criteo adapter.</p>
   <a class="cta-btn" href="https://github.com/thylinao1/ab-guardrail" target="_blank" rel="noreferrer">Open the repository <span style="opacity:.6">&#8599;</span></a>
   <div class="footer wrap">
     <div>Maksim Silchenko · 2026 · The Experimentation Guardrail Agent</div>
-    <div>Python · Anthropic tool-use · scipy · scikit-learn · statsmodels · pytest</div>
-    <div class="mono" style="color:var(--ink-4);font-size:10.5px">interactive panels are exact closed-form models of the repo's statistical methods · refer to the repo for the implementations</div>
+    <div>Python · Anthropic tool-use · scipy · scikit-learn · matplotlib · pytest</div>
+    <div class="mono" style="color:var(--ink-4);font-size:10.5px">the interactive panels are simplified closed-form models of the repository's statistical methods · see the repository for the implementations</div>
   </div>
 </section>
 
@@ -947,7 +949,7 @@ function commas(n){ return Math.round(n).toLocaleString('en-US'); }
     if(flip){
       chip.className='verdict-chip bad';
       document.getElementById('cf-verdict-t').textContent='PSM sign flip';
-      document.getElementById('cf-verdict-note').textContent='naive and ATT disagree on direction - confounding flagged';
+      document.getElementById('cf-verdict-note').textContent='naive and ATT disagree on direction: confounding flagged';
     } else if(shrink){
       chip.className='verdict-chip bad';
       document.getElementById('cf-verdict-t').textContent='Severe shrinkage';
@@ -1011,7 +1013,7 @@ function commas(n){ return Math.round(n).toLocaleString('en-US'); }
     chip.className='verdict-chip '+(worth?'bad':'ok');
     document.getElementById('mt-verdict-t').textContent=worth?'Correction needed':'Correction optional';
     document.getElementById('mt-verdict-note').textContent=worth
-      ? 'raw error '+(fwer*100).toFixed(0)+'% - far above the '+(alpha*100).toFixed(0)+'% target'
+      ? 'raw error '+(fwer*100).toFixed(0)+'%, far above the '+(alpha*100).toFixed(0)+'% target'
       : 'few enough tests that raw error stays near target';
 
     /* line chart: P(any FP) vs K, raw curve + bonferroni flat line */

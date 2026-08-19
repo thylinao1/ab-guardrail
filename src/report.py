@@ -1,11 +1,10 @@
 """Render the final Markdown statistical report.
 
-The report is intentionally opinionated: it leads with the verdict,
-then surfaces the SRM check (because if SRM fires, nothing else matters),
-then the metric tests, then PSM diagnostics with bootstrap-based
-inference and Rosenbaum sensitivity. The same structured payload that
-drives the report is also what the LLM narrative sees, so the two are
-guaranteed to be consistent.
+The order is deliberate: the verdict first, then the SRM check (if SRM
+fires, nothing below it can be interpreted), then the metric tests, then
+PSM diagnostics with bootstrap-based inference and Rosenbaum sensitivity.
+The same structured payload that drives the report is what the LLM
+narrative sees, so the two cannot disagree.
 
 A "love plot" of pre/post covariate balance is saved alongside the
 markdown when matplotlib is available.
@@ -53,8 +52,8 @@ def decide_verdict(
     2. PSM ATT and naive estimate have opposite signs, *and* the naive
        estimate was significant -> COMPROMISED (confounding).
     3. Naive estimate is significant AND PSM ATT is < SHRINKAGE_THRESHOLD
-       of naive AND PSM 95% CI covers 0 -> COMPROMISED (effect not
-       robust to covariate adjustment).
+       of naive AND PSM 95% CI covers 0 -> COMPROMISED (the effect does
+       not survive covariate adjustment).
     4. Primary metric's adjusted p-value is significant at 5% AND PSM
        ATT is in the same direction -> SAFE.
     5. Otherwise -> NO SIGNIFICANT EFFECT.
@@ -87,8 +86,8 @@ def decide_verdict(
         if sign_flip and naive_appears_significant:
             reasons.append(
                 f"PSM sign flip for {primary_metric}: naive={naive:+.4f}, ATT={att:+.4f}. "
-                "A statistically significant naive effect reverses after adjustment - "
-                "confounding likely."
+                "A statistically significant naive effect reverses after "
+                "adjustment, which points to confounding."
             )
             return VERDICT_COMPROMISED, reasons
         if naive_appears_significant and severe_shrink and ci_contains_zero:
@@ -97,7 +96,7 @@ def decide_verdict(
                 f"{att:+.4f} after PSM (<{int(SHRINKAGE_THRESHOLD * 100)}% of naive) "
                 f"and its bootstrap 95% CI "
                 f"[{primary_psm.psm_ci_low:+.4f}, {primary_psm.psm_ci_high:+.4f}] "
-                "covers zero - the effect is not robust to covariate adjustment."
+                "covers zero, so the effect does not survive covariate adjustment."
             )
             return VERDICT_COMPROMISED, reasons
 
@@ -143,11 +142,10 @@ def _fmt_pvalue(p: float) -> str:
 
 
 def _srm_section(srm: SRMResult) -> str:
-    flag = ":rotating_light:" if srm.srm_detected else ":white_check_mark:"
     lines = [
         "## 1. Sample Ratio Mismatch (SRM)",
         "",
-        f"{flag} **{'SRM DETECTED' if srm.srm_detected else 'No SRM'}** "
+        f"**{'SRM DETECTED' if srm.srm_detected else 'No SRM'}** "
         f"(chi-square p = {_fmt_pvalue(srm.p_value)}, threshold {srm.threshold}).",
         "",
         "| Variant | Expected | Observed | Count |",
@@ -226,7 +224,7 @@ def _psm_section(psm_results: list[PSMResult]) -> str:
         )
         lines.append(
             f"- Bootstrap SE: **{p.psm_se_bootstrap:.4f}**  "
-            f"(naive paired-t SE: {p.psm_se_paired_t:.4f} - biased under "
+            f"(naive paired-t SE: {p.psm_se_paired_t:.4f}, biased under "
             "matching-with-replacement; reported for comparison only)"
         )
         lines.append(
@@ -263,7 +261,7 @@ def _psm_section(psm_results: list[PSMResult]) -> str:
             if p.rosenbaum.gamma_critical is None:
                 lines.append("")
                 lines.append(
-                    "_All Γ in grid keep p ≤ 0.05 - the finding is robust to the tested levels of hidden bias._"
+                    "_Every Γ in the grid keeps p ≤ 0.05: no tested level of hidden bias overturns the finding._"
                 )
             else:
                 lines.append("")
@@ -310,7 +308,7 @@ def render_love_plot(
     ax.axvline(-0.1, color="black", linestyle=":", linewidth=0.5, alpha=0.6)
     ax.set_yticks(y, keys)
     ax.set_xlabel("Standardised mean difference")
-    ax.set_title(f"Covariate balance - `{p.metric}`")
+    ax.set_title(f"Covariate balance: {p.metric}")
     ax.legend(loc="lower right", frameon=False)
     ax.grid(axis="x", linestyle=":", alpha=0.4)
     fig.tight_layout()
@@ -334,9 +332,9 @@ def build_report(
 ) -> FinalReport:
     """Stitch the structured results together into a Markdown document.
 
-    The narrative is computed *after* the verdict is known so the LLM
-    sees the same payload that decided the verdict - we pass a callable
-    rather than a string so callers don't have to do the dance themselves.
+    The narrative is computed *after* the verdict is known, so the LLM
+    sees the same payload that decided it. We take a callable rather than
+    a string so callers don't have to sequence that themselves.
     """
     verdict, reasons = decide_verdict(srm, metric_results, psm_results, primary_metric)
 
@@ -352,20 +350,13 @@ def build_report(
         payload["data_quality"] = quality.summary_lines()
     narrative = narrative_provider(payload)
 
-    verdict_emoji = {
-        VERDICT_SAFE: ":white_check_mark:",
-        VERDICT_COMPROMISED: ":rotating_light:",
-        VERDICT_NULL: ":no_entry_sign:",
-        VERDICT_INCONCLUSIVE: ":grey_question:",
-    }.get(verdict, "")
-
     md_parts = [
         "# Experimentation Guardrail Report",
         "",
         f"_Source CSV:_ `{csv_path}`  ",
         f"_Generated:_ {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
         "",
-        f"## Verdict: {verdict_emoji} **{verdict}**",
+        f"## Verdict: **{verdict}**",
         "",
     ]
     for r in reasons:

@@ -3,12 +3,12 @@
 Real experiment exports are not tidy. A production e-commerce A/B log
 (Shopee, TikTok Shop, Criteo) routinely carries:
 
-* malformed rows  - a logging job wrote a line with the wrong field count
-* duplicate rows  - an at-least-once delivery pipeline double-logged events
-* all-null columns - a feature was instrumented but never populated
-* missing covariates - consent gates, late joins, schema drift
-* dirty numerics  - a covariate column read as text because of a stray
-                    "ERROR" / "NULL" / "" token
+* malformed rows: a logging job wrote a line with the wrong field count
+* duplicate rows: an at-least-once delivery pipeline double-logged events
+* all-null columns: a feature was instrumented but never populated
+* missing covariates: consent gates, late joins, schema drift
+* dirty numerics: a covariate column read as text because of a stray
+  "ERROR" / "NULL" / "" token
 
 This module ingests the CSV defensively, repairs what is safely
 repairable, and returns a :class:`DataQualityReport` so nothing is fixed
@@ -141,9 +141,9 @@ def load_experiment_csv(
     drop_duplicates : drop double-logged rows (default True). Duplicates are
         dropped ONLY when the file has a per-row identifier column
         (user_id, id, ...) and rows repeat on it. Without an identifier,
-        two distinct entities can legitimately share an identical row -
-        common when covariates are low-cardinality (e.g. the Criteo
-        features) - so full-row duplicates are NOT dropped.
+        two distinct entities can legitimately share an identical row
+        (common when covariates are low-cardinality, as in the Criteo
+        features), so full-row duplicates are NOT dropped.
 
     Raises
     ------
@@ -236,8 +236,8 @@ def _coerce_numeric_columns(df: pd.DataFrame) -> list[str]:
 
     A covariate column carrying a stray 'ERROR' or 'NULL' token reads as
     object dtype. If >= _NUMERIC_COERCE_THRESHOLD of its non-null values
-    parse as numbers, coerce it - the dirty tokens become NaN (counted as
-    missingness downstream) rather than poisoning the whole column.
+    parse as numbers, coerce it. The dirty tokens become NaN, counted as
+    missingness downstream, rather than poisoning the whole column.
     """
     coerced: list[str] = []
     for col in df.columns:
@@ -249,7 +249,7 @@ def _coerce_numeric_columns(df: pd.DataFrame) -> list[str]:
             continue
         frac_numeric = pd.to_numeric(non_null, errors="coerce").notna().mean()
         if frac_numeric >= _NUMERIC_COERCE_THRESHOLD:
-            # Mostly numeric -> coerce; dirty tokens become NaN.
+            # Mostly numeric, so coerce; dirty tokens become NaN.
             df[col] = pd.to_numeric(s, errors="coerce")
             coerced.append(col)
     return coerced

@@ -1,17 +1,16 @@
 """LLM layer.
 
 Routing (which column is the variant, which are metrics / covariates) is
-deterministic by default - see :func:`infer_schema_heuristic`. The LLM has
-exactly two, narrowly scoped roles:
+deterministic by default; see :func:`infer_schema_heuristic`. The LLM has
+two narrowly scoped roles:
 
-* :func:`narrate` - the ONLY LLM call on the default ``pipeline`` path. It
-  turns the finished, deterministic results JSON into a plain-English
+* :func:`narrate` is the only LLM call on the default ``pipeline`` path.
+  It turns the finished, deterministic results JSON into a plain-English
   summary. It never sees raw data and never computes a number.
-* :func:`run_tool_agent` - an OPT-IN tool-use loop (``--mode agent``) for
+* :func:`run_tool_agent` is an opt-in tool-use loop (``--mode agent``) for
   datasets whose column roles cannot be inferred deterministically. It is
-  deliberately not the default: paying LLM latency to route data to three
-  deterministic functions is poor production engineering. It is retained
-  for unfamiliar schemas and as a demonstration of tool-use orchestration.
+  not the default, because dispatching data to three deterministic
+  functions does not need a model in the loop.
 
 In every mode the statistical numbers come from ``scipy.stats`` /
 ``scikit-learn``. The LLM never computes a p-value.
@@ -176,8 +175,8 @@ Strict rules:
   everything else.
 - Mention the gap between naive_effect and psm_att when it is meaningful
   (>= 50% relative shrinkage or sign change).
-- If a Rosenbaum gamma_critical is present, mention how robust the ATT
-  is to hidden bias.
+- If a Rosenbaum gamma_critical is present, state the level of hidden
+  bias at which the ATT would stop being significant.
 - Be plain English. No bullets, no markdown headings.
 """
 
@@ -370,9 +369,9 @@ def run_tool_agent(
 ) -> AgentRun:
     """Run the tool-use agent. Returns the structured results + narrative.
 
-    Falls through to :func:`AgentError` if the API key is missing or the
-    SDK is not installed - the caller is responsible for catching and
-    degrading to ``simple`` or ``none`` mode.
+    Raises :class:`AgentError` if the API key is missing or the SDK is
+    not installed. The caller is responsible for catching that and
+    degrading to deterministic routing.
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -508,7 +507,7 @@ def _plan_from_tool_calls(
         primary_metric=primary_metric,
         secondary_metrics=secondary_metrics,
         covariates=covariates,
-        rationale=f"Tool-use agent orchestrated {len(tool_calls)} tool calls.",
+        rationale=f"Tool-use agent made {len(tool_calls)} tool calls.",
     )
 
 
@@ -557,7 +556,7 @@ def deterministic_narrative(payload: dict[str, Any]) -> str:
     for p in psm_blocks:
         gamma = p.get("rosenbaum", {}).get("gamma_critical") if p.get("rosenbaum") else None
         gamma_str = (
-            f"; robust to hidden bias up to Γ ≈ {gamma:.2f}" if gamma else ""
+            f"; significance breaks at hidden bias Γ ≈ {gamma:.2f}" if gamma else ""
         )
         parts.append(
             f"After propensity matching on {', '.join(p['covariates'])}, "

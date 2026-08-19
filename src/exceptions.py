@@ -18,10 +18,10 @@ class DataValidationError(GuardrailError):
 
 
 class StatisticalCheckError(GuardrailError):
-    """A statistical routine could not be executed - e.g. degenerate
-    sample sizes, zero variance, or a singular design matrix in PSM."""
+    """A statistical routine could not be executed: degenerate sample
+    sizes, zero variance, or a singular design matrix in PSM."""
 
 
 class AgentError(GuardrailError):
-    """The LLM agent failed to produce a usable response -
-    network error, schema-violating JSON, or missing API key."""
+    """The LLM agent failed to produce a usable response, because of a
+    network error, schema-violating JSON, or a missing API key."""

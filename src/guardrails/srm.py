@@ -88,7 +88,7 @@ def srm_check(
     if (expected < 5).any():
         # Chi-square approximation degrades with tiny expected cells.
         raise StatisticalCheckError(
-            "Expected counts below 5 in at least one cell - sample is too "
+            "Expected counts below 5 in at least one cell; the sample is too "
             "small for a reliable chi-square SRM test."
         )
 

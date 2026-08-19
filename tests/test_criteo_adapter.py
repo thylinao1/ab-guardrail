@@ -1,9 +1,9 @@
 """Tests for the Criteo Uplift dataset adapter.
 
 The adapter has no real Criteo file in CI, so these build a tiny
-Criteo-shaped CSV and exercise the mapping. The key regression guarded
-here: when sampling leaves a non-contiguous index, the column mapping
-must stay positional - index-aligned assignment silently NaNs out almost
+Criteo-shaped CSV and exercise the mapping. The regression guarded here:
+when sampling leaves a non-contiguous index, the column mapping must stay
+positional, because index-aligned assignment silently NaNs out almost
 every row.
 """
 

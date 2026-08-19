@@ -1,7 +1,7 @@
 """Tests for defensive CSV loading and the data-quality report.
 
 These exercise the messy-real-world-data path: malformed rows, duplicates,
-all-null columns, dirty numeric tokens, and missing covariates - the
+all-null columns, dirty numeric tokens, and missing covariates, the
 pathologies a production e-commerce export carries.
 """
 
@@ -55,7 +55,7 @@ def test_duplicate_rows_dropped_when_keyed_on_identifier(tmp_path: Path):
 def test_identical_rows_kept_when_no_identifier_column(tmp_path: Path):
     """Without a per-row identifier, two distinct entities can legitimately
     share an identical row (low-cardinality covariates, e.g. Criteo). Such
-    rows must NOT be dropped - this is the bug real Criteo data exposed."""
+    rows must NOT be dropped. This is the bug real Criteo data exposed."""
     rng = np.random.default_rng(1)
     n = 600
     # low-cardinality covariates -> many genuinely identical rows
